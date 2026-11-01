@@ -1,0 +1,48 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: say-backend
+
+  # Cấu hình Kết nối PostgreSQL Database
+  datasource:
+    url: jdbc:postgresql://localhost:5432/say_db
+    username: say_user
+    password: say_password
+    driver-class-name: org.postgresql.Driver
+
+  # Cấu hình JPA / Hibernate
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate # Sử dụng schema.sql để kiểm soát bảng, tránh tự sinh sai kiểu dữ liệu
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Cấu hình Google OAuth2 Client
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:YOUR_GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET:YOUR_GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
+
+  # Cấu hình Jackson Format JSON (Format chuẩn ISO cho LocalDate/LocalDateTime)
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-naming-strategy: SNAKE_CASE
+
+# Cấu hình CORS cho phép React Frontend (chạy ở port 5173 / 3000) gọi API
+app:
+  cors:
+    allowed-origins: "http://localhost:5173,http://localhost:3000"

@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --color-midnight-bg: #081724;
+  --color-midnight-surface: #142C40;
+  --color-midnight-elevated: #31566A;
+  --color-midnight-accent: #91B9C5;
+  --color-lavender-accent: #B39DDB;
+  --color-warm-cream: #F2EDE3;
+}
