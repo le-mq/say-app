@@ -20,9 +20,14 @@ public class MusicSearchController {
     @GetMapping
     public CompletableFuture<ResponseEntity<ApiResponse<List<TrackSearchResponseDto>>>> searchMusic(
             @RequestParam String query,
-            @RequestParam(required = false, defaultValue = "ALL") String platform
+            @RequestParam(required = false, defaultValue = "YOUTUBE") String platform
     ) {
         return externalMusicService.searchMusic(query, platform)
                 .thenApply(results -> ResponseEntity.ok(ApiResponse.success("Music search results retrieved successfully", results)));
+    }
+
+    @GetMapping("/pool")
+    public ResponseEntity<ApiResponse<List<TrackSearchResponseDto>>> getSharedMusicPool() {
+        return ResponseEntity.ok(ApiResponse.success("Shared music pool retrieved successfully", externalMusicService.getSharedPool()));
     }
 }

@@ -10,12 +10,120 @@
   --color-warm-cream: #F2EDE3;
 }
 
+html {
+  scroll-behavior: smooth;
+  scroll-snap-type: y proximity;
+}
+
 body {
   background-color: #081724;
   color: #E8EEF0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   margin: 0;
   padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Modern, balanced Instagram / Threads style display font */
+.font-display {
+  font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+/* Modern clean grotesk for tech labels, handles, and tags */
+.font-grotesk {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.font-serif {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+/* Upgraded mono from stiff typewriter to sleek Space Grotesk / JetBrains */
+.font-mono {
+  font-family: 'Space Grotesk', 'JetBrains Mono', -apple-system, monospace;
+}
+
+.font-code {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.font-sans {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ======================================================== */
+/* ULTRA-SLEEK MINIMALIST SCROLLBAR (Zero buttons / arrows) */
+/* ======================================================== */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background: rgba(145, 185, 197, 0.28) !important;
+  border-radius: 9999px !important;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(145, 185, 197, 0.55) !important;
+}
+
+/* Eliminate browser scrollbar arrows / buttons completely on Windows (Chrome, Edge, Safari, Brave) */
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:end:increment,
+::-webkit-scrollbar-button:horizontal:start:decrement,
+::-webkit-scrollbar-button:horizontal:end:increment {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+::-webkit-scrollbar-corner {
+  display: none !important;
+  background: transparent !important;
+}
+
+/* Firefox thin scrollbar only (MUST NOT apply to WebKit/Chromium or Chrome disables ::-webkit-scrollbar-button) */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(145, 185, 197, 0.28) transparent !important;
+  }
+}
+
+.bg-grid-dots {
+  background-image: radial-gradient(rgba(145, 185, 197, 0.12) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
 }
 
 @keyframes spinSlow {
@@ -25,4 +133,21 @@ body {
 
 .animate-spin-slow {
   animation: spinSlow 12s linear infinite;
+}
+
+/* Fix Toastify rounded corners & progress bar bleed */
+.Toastify__toast {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.Toastify__toast-body {
+  padding: 10px 14px !important;
+}
+
+.Toastify__progress-bar {
+  border-bottom-left-radius: 16px !important;
+  border-bottom-right-radius: 16px !important;
+  background: linear-gradient(to right, #91B9C5, #B39DDB) !important;
+  height: 4px !important;
 }

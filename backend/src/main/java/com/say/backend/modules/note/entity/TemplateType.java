@@ -4,5 +4,6 @@ public enum TemplateType {
     RECEIPTIFY,
     CASSETTE,
     STAMP,
-    VINYL
+    VINYL,
+    GALAXY
 }

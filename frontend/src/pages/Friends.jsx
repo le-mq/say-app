@@ -1,185 +1,157 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import MusicCard from '../components/MusicCard';
+import { Users, Radio, UserCheck, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { useAuthStore } from '../store/authStore';
-import { socialService } from '../services/socialService';
-import { Users, UserPlus, Check, X, Disc } from 'lucide-react';
 
-const MOCK_FRIENDS = [
+const FRIENDS_NOTES = [
   {
-    friendshipId: 'fs-1',
-    friendId: 'u-2',
-    displayName: 'Aria Melodia',
-    avatarUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100',
-    audiophileRank: 'Vinyl Connoisseur',
-    bio: 'Late night jazz, analog synths, and cup of warm matcha.'
+    id: 'friend-note-1',
+    userDisplayName: 'Marcus Webb',
+    handle: '@marcusw',
+    userAvatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
+    timeAgo: '2h ago',
+    songTitle: 'ALBERTO BALSALM TAPE DUB',
+    artistName: 'Aphex Vibe',
+    songImageUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500',
+    externalSongUrl: 'https://open.spotify.com',
+    audioSnippetStart: '0:15',
+    audioSnippetEnd: '0:45',
+    templateType: 'CASSETTE',
+    emotionTag: '💬 Nostalgic',
+    visibility: 'FRIENDS',
+    lyricSnippet: 'Late night tea, rainy windows in Berlin.',
+    caption: 'Cleaning tape heads with isopropyl and savoring quiet.',
+    likesCount: 16,
+    dialogues: [],
   },
   {
-    friendshipId: 'fs-2',
-    friendId: 'u-3',
-    displayName: 'Dorian Beats',
-    avatarUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
-    audiophileRank: 'Crate Digger',
-    bio: 'Sampling Tokyo train sounds into ambient dub.'
-  }
+    id: 'friend-note-2',
+    userDisplayName: 'Elena Rostova',
+    handle: '@erostova',
+    userAvatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
+    timeAgo: '5h ago',
+    songTitle: 'HOLOCENE ACOUSTIC CHILL',
+    artistName: 'Bon Iver Style',
+    songImageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500',
+    externalSongUrl: 'https://open.spotify.com',
+    audioSnippetStart: '0:30',
+    audioSnippetEnd: '1:00',
+    templateType: 'STAMP',
+    emotionTag: '🍃 Peaceful',
+    lyricSnippet: 'And at once I knew I was not magnificent.',
+    caption: 'Fog rolling off the pines in Bergen. Cold acoustic air.',
+    likesCount: 22,
+    dialogues: [],
+  },
 ];
 
 export default function Friends() {
-  const { user } = useAuthStore();
-  const [friends, setFriends] = useState([]);
-  const [pendingRequests, setPendingRequests] = useState([]);
-  const [targetId, setTargetId] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [activeSubTab, setActiveSubTab] = useState('feed'); // 'feed' | 'hub'
+  const [friendRequests, setFriendRequests] = useState([
+    {
+      id: 'req-1',
+      displayName: 'Julian Vance',
+      handle: '@julianv',
+      audiophileRank: 'Ambient Specialist',
+      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
+    },
+  ]);
 
-  const loadSocialData = async () => {
-    setLoading(true);
-    try {
-      const flist = await socialService.getFriendsList(user.id);
-      setFriends(flist && flist.length > 0 ? flist : MOCK_FRIENDS);
-    } catch (err) {
-      setFriends(MOCK_FRIENDS);
-    }
-
-    try {
-      const reqs = await socialService.getPendingRequests(user.id);
-      setPendingRequests(reqs || []);
-    } catch (err) {
-      setPendingRequests([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadSocialData();
-  }, [user.id]);
-
-  const handleSendRequest = async (e) => {
-    e.preventDefault();
-    if (!targetId.trim()) return;
-    try {
-      await socialService.sendFriendRequest(user.id, targetId.trim());
-      toast.success("Friend request sent!");
-      setTargetId('');
-      loadSocialData();
-    } catch (err) {
-      toast.error("Failed to send request: " + err.message);
-    }
-  };
-
-  const handleAccept = async (friendshipId) => {
-    try {
-      await socialService.acceptFriendRequest(friendshipId, user.id);
-      toast.success("Friend request accepted!");
-      loadSocialData();
-    } catch (err) {
-      toast.error(err.message || "Failed to accept");
-    }
-  };
-
-  const handleReject = async (friendshipId) => {
-    try {
-      await socialService.rejectFriendRequest(friendshipId, user.id);
-      toast.info("Friend request declined");
-      loadSocialData();
-    } catch (err) {
-      toast.error(err.message || "Failed to decline");
-    }
+  const handleAcceptRequest = (id, name) => {
+    setFriendRequests(prev => prev.filter(r => r.id !== id));
+    toast.success(`Connected with ${name}!`);
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 pb-32 space-y-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 pb-36">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* 1. Header with Friends count & Sub-Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-black text-[#E8EEF0] tracking-tight">Sound Community</h1>
-          <p className="text-xs text-[#91B9C5]">Connect with fellow listeners and exchange song dialogues</p>
+          <div className="flex items-center gap-2 mb-1">
+            <Users className="w-5 h-5 text-[#91B9C5]" />
+            <h1 className="text-xl sm:text-2xl font-bold text-[#E8EEF0]">
+              Friends Space
+            </h1>
+            <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-[#142c40] text-[#91B9C5] border border-[#1f425f]">
+              2 Friends
+            </span>
+          </div>
+          <p className="text-xs text-[#91B9C5]/70 max-w-xl">
+            Shared auditory diary with your inner circle. Private notes and acoustic dialogue.
+          </p>
         </div>
 
-        {/* Add Friend Form */}
-        <form onSubmit={handleSendRequest} className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Enter User UUID..."
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-            className="bg-[#142C40] border border-[#31566A] rounded-xl px-3 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5] w-56"
-          />
+        {/* Sub-Tabs: Friends Feed | Friendship Hub */}
+        <div className="flex items-center gap-1 bg-[#0c1f2e] p-1 rounded-xl border border-[#16354d]">
           <button
-            type="submit"
-            className="bg-[#91B9C5] text-[#081724] font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow"
+            onClick={() => setActiveSubTab('feed')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+              activeSubTab === 'feed'
+                ? 'bg-[#183952] text-[#E8EEF0] border border-[#235073]'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            Connect
+            <Radio className="w-3.5 h-3.5" />
+            <span>Friends Feed</span>
           </button>
-        </form>
+
+          <button
+            onClick={() => setActiveSubTab('hub')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+              activeSubTab === 'hub'
+                ? 'bg-[#183952] text-[#E8EEF0] border border-[#235073]'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Friendship Hub ({friendRequests.length})</span>
+          </button>
+        </div>
       </div>
 
-      {/* Pending Requests */}
-      {pendingRequests.length > 0 && (
-        <section className="bg-[#142C40]/60 border border-[#91B9C5]/40 rounded-3xl p-5 shadow">
-          <h2 className="text-sm font-bold text-[#E8EEF0] mb-3">Pending Friend Requests ({pendingRequests.length})</h2>
-          <div className="space-y-2">
-            {pendingRequests.map(req => (
-              <div key={req.id} className="flex items-center justify-between bg-[#081724] p-3 rounded-2xl border border-[#31566A]/40">
-                <div className="flex items-center gap-3">
-                  <img src={req.requesterAvatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80"} alt="" className="w-9 h-9 rounded-full object-cover" />
-                  <div>
-                    <p className="text-xs font-bold text-[#E8EEF0]">{req.requesterDisplayName}</p>
-                    <span className="text-[10px] text-[#91B9C5] font-mono">Wants to share sound notes</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAccept(req.id)}
-                    className="p-1.5 bg-[#91B9C5] text-[#081724] rounded-lg hover:scale-105 transition-transform"
-                    title="Accept"
-                  >
-                    <Check className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleReject(req.id)}
-                    className="p-1.5 bg-[#31566A]/50 text-red-300 rounded-lg hover:bg-red-950/40 transition-colors"
-                    title="Reject"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Friends List */}
-      <section className="bg-[#142C40]/80 border border-[#31566A]/40 rounded-3xl p-6 shadow-xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="w-5 h-5 text-[#91B9C5]" />
-          <h2 className="text-lg font-bold text-[#E8EEF0]">Your Audiophile Circle ({friends.length})</h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {friends.map(f => (
-            <div
-              key={f.friendshipId || f.friendId}
-              className="bg-[#081724]/70 border border-[#31566A]/30 p-4 rounded-2xl flex items-start gap-3.5 hover:border-[#91B9C5]/40 transition-all"
-            >
-              <img
-                src={f.avatarUrl}
-                alt={f.displayName}
-                className="w-12 h-12 rounded-full object-cover ring-2 ring-[#91B9C5]/30 shrink-0"
-              />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-[#E8EEF0] truncate">{f.displayName}</h3>
-                  <span className="text-[10px] font-mono text-[#B39DDB]">{f.audiophileRank}</span>
-                </div>
-                <p className="text-xs text-[#91B9C5]/80 line-clamp-2 mt-1">{f.bio}</p>
-              </div>
-            </div>
+      {/* 2. Main Tab Content */}
+      {activeSubTab === 'feed' ? (
+        /* 2-COLUMN GRID MATCHING SCREENSHOT 2 */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6 justify-items-center w-full items-start">
+          {FRIENDS_NOTES.map(note => (
+            <MusicCard key={note.id} note={note} compact />
           ))}
         </div>
-      </section>
+      ) : (
+        /* Friendship Hub Tab */
+        <div className="bg-[#0c1f2e] border border-[#16354d] rounded-2xl p-6 max-w-xl mx-auto">
+          <h2 className="text-sm font-bold text-[#E8EEF0] font-mono mb-4 flex items-center gap-2">
+            <span>Pending Acoustic Invitations</span>
+          </h2>
+
+          {friendRequests.length === 0 ? (
+            <p className="text-xs text-[#91B9C5]/60 font-mono py-4 text-center">
+              No pending connection requests.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {friendRequests.map(req => (
+                <div key={req.id} className="flex items-center justify-between p-3 rounded-xl bg-[#081724] border border-[#193a54]">
+                  <div className="flex items-center gap-3">
+                    <img src={req.avatarUrl} alt={req.displayName} className="w-9 h-9 rounded-full object-cover" />
+                    <div>
+                      <p className="text-xs font-bold text-[#E8EEF0]">{req.displayName}</p>
+                      <p className="text-[10px] text-[#91B9C5] font-mono">{req.handle} · {req.audiophileRank}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAcceptRequest(req.id, req.displayName)}
+                    className="px-3 py-1.5 rounded-lg bg-[#91B9C5] text-[#081724] font-mono text-xs font-bold hover:bg-[#a4cad6] transition-colors cursor-pointer"
+                  >
+                    Accept
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );

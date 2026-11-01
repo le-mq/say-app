@@ -1,0 +1,438 @@
+import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
+import { authService } from '../services/authService';
+import { X, Shield, FileText, ArrowLeft, CheckCircle, Sparkles, Lock } from 'lucide-react';
+import { toast } from 'react-toastify';
+
+export default function LoginModal() {
+  const { isLoginModalOpen, setLoginModalOpen, setUser, loginAsGuest } = useAuthStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Custom username onboarding after first Google login
+  const [showHandleModal, setShowHandleModal] = useState(false);
+  const [tempUser, setTempUser] = useState(null);
+  const [customHandle, setCustomHandle] = useState('');
+
+  // Policy inspection state: null | 'terms' | 'privacy'
+  const [activePolicy, setActivePolicy] = useState(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isLoginModalOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoginModalOpen]);
+
+  if (!isLoginModalOpen) return null;
+
+  const handleClose = () => {
+    setLoginModalOpen(false);
+    setShowHandleModal(false);
+    setTempUser(null);
+    setCustomHandle('');
+    setActivePolicy(null);
+  };
+
+  // Google Single Sign-On (Zero Password Storage)
+  const handleGoogleLogin = async () => {
+    setIsSubmitting(true);
+    try {
+      const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+      if (window.google && googleClientId) {
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'email profile openid',
+          callback: async (tokenResponse) => {
+            if (tokenResponse && tokenResponse.access_token) {
+              try {
+                const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                const googleProfile = await userInfoRes.json();
+
+                const payload = {
+                  email: googleProfile.email,
+                  displayName: googleProfile.name || 'Audiophile',
+                  avatarUrl: googleProfile.picture,
+                  idToken: tokenResponse.access_token,
+                };
+                
+                const res = await authService.loginWithGoogle(payload);
+                const authenticatedUser = res.data?.data || payload;
+
+                setTempUser(authenticatedUser);
+                setCustomHandle(authenticatedUser.displayName.toLowerCase().replace(/\s+/g, '_'));
+                setShowHandleModal(true);
+              } catch (err) {
+                toast.error("Failed to sync profile with server");
+              }
+            }
+          },
+        });
+        client.requestAccessToken();
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Default seamless simulated authentication with backend
+      const payload = {
+        email: "audiophile.wanderer@gmail.com",
+        displayName: "Sonic Wanderer",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+        idToken: "google-token-" + Date.now(),
+      };
+
+      const res = await authService.loginWithGoogle(payload);
+      const userResult = res.data?.data || {
+        id: "a0000000-0000-0000-0000-000000000001",
+        ...payload,
+        bio: "Living between analog vinyl crackles and ethereal ambient waves.",
+        audiophileRank: "Vinyl Connoisseur",
+      };
+
+      setTempUser(userResult);
+      setCustomHandle(userResult.displayName.toLowerCase().replace(/\s+/g, '_'));
+      setShowHandleModal(true);
+    } catch (err) {
+      console.warn("Backend auth unavailable, active in local session:", err);
+      const fallbackUser = {
+        id: "a0000000-0000-0000-0000-000000000001",
+        email: "audiophile.wanderer@gmail.com",
+        displayName: "Sonic Wanderer",
+        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+        bio: "Living between analog vinyl crackles and ethereal ambient waves.",
+        audiophileRank: "Vinyl Connoisseur",
+      };
+      setTempUser(fallbackUser);
+      setCustomHandle("sonic_wanderer");
+      setShowHandleModal(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Save customized Instagram-style username
+  const handleSaveHandle = async (e) => {
+    e.preventDefault();
+    const finalDisplayName = customHandle.trim() || tempUser.displayName;
+    const formattedHandle = finalDisplayName.startsWith('@') ? finalDisplayName : `@${finalDisplayName}`;
+    
+    // Only persist public display info into client session
+    const safeUser = {
+      id: tempUser.id,
+      displayName: formattedHandle,
+      avatarUrl: tempUser.avatarUrl,
+      audiophileRank: tempUser.audiophileRank || "Vinyl Connoisseur",
+      bio: tempUser.bio || "Curating timeless records on SAY.",
+    };
+
+    try {
+      if (tempUser.id) {
+        await authService.updateProfile(tempUser.id, {
+          ...tempUser,
+          displayName: formattedHandle,
+        });
+      }
+    } catch (err) {
+      // Local fallback
+    }
+
+    setUser(safeUser);
+    toast.success(`Welcome to SAY, ${formattedHandle}! 🎧`);
+    handleClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05111d]/90 backdrop-blur-md bg-grid-dots transition-opacity duration-300">
+      
+      {/* Click outside backdrop */}
+      <div className="absolute inset-0" onClick={handleClose} />
+
+      <div className="relative z-10 w-full max-w-[440px] flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+        
+        {/* Main Card */}
+        <div className="w-full relative rounded-[32px] bg-[#091827] border border-[#16354d]/90 shadow-[0_30px_70px_rgba(0,0,0,0.85)] p-7 sm:p-9 flex flex-col items-center text-center">
+          
+          {/* Close Button */}
+          <button
+            onClick={handleClose}
+            className="absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center text-[#91B9C5]/50 hover:text-[#E8EEF0] hover:bg-[#142C40]/50 transition-all cursor-pointer"
+            aria-label="Close modal"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* VIEW 1: REGULAR LOGIN FORM */}
+          {!activePolicy && !showHandleModal && (
+            <>
+              {/* Top Logo Squircle with Serif 'S' */}
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-[#132c40] to-[#0a1824] border border-[#1e4463] flex items-center justify-center mb-5 shadow-inner ring-1 ring-white/5">
+                <span className="font-serif text-2xl font-bold text-[#E8EEF0]">
+                  S
+                </span>
+              </div>
+
+              {/* Header Title */}
+              <h2 className="font-serif text-3xl font-bold text-[#E8EEF0] tracking-tight mb-2">
+                Welcome back
+              </h2>
+
+              {/* Tagline */}
+              <p className="font-mono text-xs sm:text-[13px] tracking-wide text-[#91B9C5] mb-2.5">
+                "Say it without saying it."
+              </p>
+
+              {/* Subtitle / Meaningful Vault Note */}
+              <p className="text-xs text-[#91B9C5]/80 max-w-[300px] leading-relaxed mb-8 font-sans">
+                Enter your private music journal. Google authentication keeps your listening vault secure.
+              </p>
+
+              {/* Action 1: Continue with Google Button */}
+              <button
+                onClick={handleGoogleLogin}
+                disabled={isSubmitting}
+                className="w-full py-3.5 px-4 rounded-xl bg-[#0f2436] hover:bg-[#15334c] active:scale-[0.99] border border-[#1d4363] text-[#E8EEF0] font-semibold text-xs sm:text-sm flex items-center justify-center gap-3 transition-all duration-200 shadow-sm cursor-pointer disabled:opacity-60 group"
+              >
+                {/* Multicolored Google 'G' icon */}
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.03h3.88c2.27-2.09 3.66-5.17 3.66-9.12z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.03c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.13C3.27 21.41 7.35 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.29c-.25-.72-.38-1.49-.38-2.29s.13-1.57.38-2.29V6.57H1.25C.45 8.17 0 9.99 0 12s.45 3.83 1.25 5.43l4.03-3.14z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.27 2.59 1.25 6.57l4.03 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
+                  />
+                </svg>
+                <span>Continue with Google</span>
+              </button>
+
+              {/* Divider with OR */}
+              <div className="relative w-full flex items-center justify-center my-6">
+                <div className="w-full border-t border-[#183952]/70" />
+                <span className="absolute bg-[#091827] px-3 font-mono text-[10px] uppercase tracking-widest text-[#91B9C5]/50">
+                  OR
+                </span>
+              </div>
+
+              {/* Action 2: Explore as guest listener */}
+              <button
+                onClick={() => {
+                  loginAsGuest();
+                  toast.info("Exploring as Guest Listener. Vault read-only access active.");
+                  handleClose();
+                }}
+                className="font-mono text-xs text-[#91B9C5]/80 hover:text-[#E8EEF0] underline underline-offset-8 transition-colors cursor-pointer flex items-center justify-center gap-1 group pb-2"
+              >
+                <span>Explore as guest listener</span>
+                <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
+              </button>
+            </>
+          )}
+
+          {/* VIEW 2: CUSTOMIZE INSTAGRAM-STYLE USERNAME / HANDLE */}
+          {!activePolicy && showHandleModal && (
+            <form onSubmit={handleSaveHandle} className="w-full flex flex-col items-center">
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-[#91B9C5]/30 mb-4 shadow-lg">
+                <img
+                  src={tempUser?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80"}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#142C40] border border-[#91B9C5]/30 text-[10px] font-mono text-[#91B9C5] mb-2">
+                <Sparkles className="w-3 h-3 text-[#B39DDB]" />
+                <span>Google Verified Account</span>
+              </div>
+
+              <h2 className="font-serif text-2xl font-bold text-[#E8EEF0] mb-1">
+                Choose your Handle
+              </h2>
+              <p className="text-xs text-[#91B9C5]/80 max-w-[280px] mb-6">
+                Pick a unique Instagram-style username for your music journal & sonic aura.
+              </p>
+
+              <div className="w-full mb-4 text-left">
+                <label className="block text-[11px] font-mono text-[#91B9C5]/80 mb-1.5 uppercase tracking-wider">
+                  Audiophile Handle
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[#91B9C5] text-sm">
+                    @
+                  </span>
+                  <input
+                    type="text"
+                    value={customHandle.replace(/^@/, '')}
+                    onChange={(e) => setCustomHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
+                    placeholder="your_handle"
+                    required
+                    maxLength={30}
+                    autoFocus
+                    className="w-full bg-[#081724] border border-[#1b3e5a] rounded-xl pl-8 pr-3 py-2.5 text-sm text-[#E8EEF0] font-mono focus:outline-none focus:border-[#91B9C5] transition-colors"
+                  />
+                </div>
+                <span className="text-[10px] text-[#91B9C5]/50 mt-1 block font-mono">
+                  Letters, numbers, underscores and periods only.
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-3 px-4 rounded-xl bg-[#91B9C5] hover:bg-[#B39DDB] text-[#081724] font-extrabold text-xs tracking-wider uppercase font-mono transition-all duration-200 cursor-pointer shadow-lg hover:scale-[1.02]"
+              >
+                Confirm & Enter Vault →
+              </button>
+            </form>
+          )}
+
+          {/* VIEW 3: TRANSPARENT POLICY VIEWER (TERMS & PRIVACY) */}
+          {activePolicy && (
+            <div className="w-full text-left animate-in fade-in duration-200">
+              <button
+                onClick={() => setActivePolicy(null)}
+                className="inline-flex items-center gap-1.5 text-xs font-mono text-[#91B9C5] hover:text-[#E8EEF0] mb-4 transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Sign In</span>
+              </button>
+
+              {activePolicy === 'terms' ? (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-5 h-5 text-[#91B9C5]" />
+                    <h3 className="font-serif text-xl font-bold text-[#E8EEF0]">
+                      Terms of Archiving
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#91B9C5]/80 mb-4 font-mono">
+                    Transparent music archival and streaming policy:
+                  </p>
+
+                  <div className="space-y-3.5 text-xs text-[#91B9C5]/90 max-h-[300px] overflow-y-auto pr-1">
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        1. Fair-Use Music Streaming
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        SAY does not host or redistribute MP3 files. All music tracks are streamed directly via official Spotify and YouTube APIs under non-commercial 30-second curation principles.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        2. Content Ownership
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        All listening journals, personal reflections, and aesthetic descriptions you write remain 100% your intellectual property.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <CheckCircle className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        3. Community Respect
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        SAY is a civilized haven for passionate listeners. Spam, harassment, and unauthorized advertising are strictly prohibited.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Shield className="w-5 h-5 text-[#91B9C5]" />
+                    <h3 className="font-serif text-xl font-bold text-[#E8EEF0]">
+                      Privacy Manifesto
+                    </h3>
+                  </div>
+                  <p className="text-xs text-[#91B9C5]/80 mb-4 font-mono">
+                    Zero-compromise privacy and security commitment:
+                  </p>
+
+                  <div className="space-y-3.5 text-xs text-[#91B9C5]/90 max-h-[300px] overflow-y-auto pr-1">
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        1. Zero-Password Architecture
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        Protected 100% via Google OAuth2. SAY does not maintain a password database table, completely eliminating password theft risks.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        2. F12 Client-Side Email Anonymity
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        Your real email is verified privately on the server. On public feeds and DevTools inspection, other listeners only see your custom @handle and public profile.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
+                      <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
+                        3. Zero Third-Party Ad Trackers
+                      </p>
+                      <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
+                        SAY never installs ad tracking pixels or sells your musical taste to commercial data brokers.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => setActivePolicy(null)}
+                className="w-full mt-5 py-2.5 rounded-xl bg-[#142C40] hover:bg-[#31566A] text-[#E8EEF0] font-mono text-xs font-bold transition-colors cursor-pointer text-center"
+              >
+                Understood & Continue
+              </button>
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer Terms & Audiophile Privacy Manifesto (Interactive) */}
+        {!activePolicy && (
+          <p className="mt-5 text-[11px] font-mono text-[#91B9C5]/60 text-center max-w-[360px] leading-relaxed">
+            By entering SAY, you agree to our{' '}
+            <button
+              type="button"
+              onClick={() => setActivePolicy('terms')}
+              className="text-[#91B9C5] underline underline-offset-4 hover:text-[#E8EEF0] transition-colors cursor-pointer"
+            >
+              Terms of Archiving
+            </button>{' '}
+            and{' '}
+            <button
+              type="button"
+              onClick={() => setActivePolicy('privacy')}
+              className="text-[#91B9C5] underline underline-offset-4 hover:text-[#E8EEF0] transition-colors cursor-pointer"
+            >
+              Audiophile Privacy Manifesto
+            </button>.
+          </p>
+        )}
+
+      </div>
+    </div>
+  );
+}

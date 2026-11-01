@@ -5,7 +5,7 @@ import { Disc3, Sparkles, Headphones, Radio, ArrowRight } from 'lucide-react';
 
 export default function Landing() {
   const navigate = useNavigate();
-  const { setStudioOpen } = useAuthStore();
+  const { setStudioOpen, setLoginModalOpen } = useAuthStore();
 
   return (
     <div className="min-h-[85vh] flex flex-col justify-center items-center text-center px-4 py-12 relative overflow-hidden">
@@ -34,7 +34,7 @@ export default function Landing() {
       <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
         <button
           onClick={() => navigate('/feed')}
-          className="flex items-center gap-2 bg-[#91B9C5] hover:bg-[#B39DDB] text-[#081724] font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-xl transition-all hover:scale-105"
+          className="flex items-center gap-2 bg-[#91B9C5] hover:bg-[#B39DDB] text-[#081724] font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-xl transition-all hover:scale-105 cursor-pointer"
         >
           <span>Explore Public Feed</span>
           <ArrowRight className="w-4 h-4" />
@@ -42,10 +42,17 @@ export default function Landing() {
 
         <button
           onClick={() => setStudioOpen(true)}
-          className="flex items-center gap-2 bg-[#142C40] hover:bg-[#31566A] text-[#E8EEF0] border border-[#31566A] font-bold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all"
+          className="flex items-center gap-2 bg-[#142C40] hover:bg-[#31566A] text-[#E8EEF0] border border-[#31566A] font-bold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer"
         >
           <Disc3 className="w-4 h-4 text-[#91B9C5]" />
           <span>Launch Creative Studio</span>
+        </button>
+
+        <button
+          onClick={() => setLoginModalOpen(true)}
+          className="flex items-center gap-2 bg-[#091827] hover:bg-[#12283a] text-[#91B9C5] hover:text-[#E8EEF0] border border-[#1b3d59] font-mono text-xs px-5 py-3.5 rounded-2xl shadow-md transition-all cursor-pointer"
+        >
+          <span>Sign In to Vault →</span>
         </button>
       </div>
 

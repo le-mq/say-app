@@ -1,88 +1,72 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { usePlayerStore } from '../store/playerStore';
-import { Play, Pause, Disc, ExternalLink, X } from 'lucide-react';
+import { Play, Pause } from 'lucide-react';
+
+const DEFAULT_TRACK = {
+  id: 'note-0492',
+  songTitle: 'Night Drive / Midnight Ambient',
+  artistName: 'Khruangbin Vibe • Lossless 24-Bit DAC',
+  songImageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200',
+  durationSec: 162, // 2:42
+};
 
 export default function PlayerDock() {
-  const { currentTrack, isPlaying, togglePlay, stopTrack } = usePlayerStore();
+  const { currentTrack, isPlaying, togglePlay } = usePlayerStore();
+  const [localPlaying, setLocalPlaying] = useState(false);
 
-  if (!currentTrack) return null;
+  const track = currentTrack || DEFAULT_TRACK;
+  const activeIsPlaying = currentTrack ? isPlaying : localPlaying;
 
-  const startSec = currentTrack.audioSnippetStart || 0;
-  const endSec = startSec + 30;
+  const handleToggle = () => {
+    if (currentTrack) {
+      togglePlay();
+    } else {
+      setLocalPlaying(!localPlaying);
+    }
+  };
 
   return (
-    <aside className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[94%] max-w-2xl bg-[#142C40]/95 backdrop-blur-xl border border-[#91B9C5]/30 rounded-2xl p-3 shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+    <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#07131e]/98 backdrop-blur-lg border-t border-[#122b3e] px-4 sm:px-8 py-3 flex items-center justify-between">
       
-      {/* Vinyl Disk and Song Info */}
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="relative w-12 h-12 rounded-full overflow-hidden bg-black shrink-0 border border-[#91B9C5]/40 shadow-md">
+      {/* 1. Track Info (Left) */}
+      <div className="flex items-center gap-3.5 min-w-0">
+        <div className="w-10 h-10 rounded-lg overflow-hidden bg-black shrink-0 border border-[#1b3d5b] shadow-md">
           <img
-            src={currentTrack.songImageUrl}
-            alt={currentTrack.songTitle}
-            className={`w-full h-full object-cover ${isPlaying ? 'animate-spin' : ''}`}
-            style={{ animationDuration: '4s' }}
+            src={track.songImageUrl}
+            alt={track.songTitle}
+            className={`w-full h-full object-cover ${activeIsPlaying ? 'opacity-90' : 'opacity-80'}`}
           />
-          <div className="absolute inset-0 m-auto w-3.5 h-3.5 rounded-full bg-[#081724] border border-[#91B9C5]" />
         </div>
 
         <div className="min-w-0">
           <p className="font-bold text-xs text-[#E8EEF0] truncate leading-tight">
-            {currentTrack.songTitle}
+            {track.songTitle}
           </p>
-          <p className="text-[11px] text-[#91B9C5] truncate">
-            {currentTrack.artistName}
+          <p className="text-[10px] text-[#91B9C5]/80 font-mono truncate mt-0.5">
+            {track.artistName}
           </p>
-          <span className="text-[9px] font-mono text-[#B39DDB]">
-            Snippet: {startSec}s - {endSec}s (30s)
-          </span>
         </div>
       </div>
 
-      {/* Center Waveform Audio Animation */}
-      <div className="hidden sm:flex items-center gap-1 h-6">
-        {[40, 75, 100, 60, 90, 45, 80, 65, 95, 30].map((h, i) => (
-          <div
-            key={i}
-            className={`w-1 bg-[#91B9C5] rounded-full transition-all duration-200 ${
-              isPlaying ? 'animate-pulse' : 'opacity-40'
-            }`}
-            style={{
-              height: isPlaying ? `${h}%` : '20%',
-              animationDelay: `${i * 100}ms`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Controls */}
-      <div className="flex items-center gap-2">
+      {/* 2. Play Control & Time (Right) */}
+      <div className="flex items-center gap-3">
         <button
-          onClick={togglePlay}
-          className="w-10 h-10 rounded-xl bg-[#91B9C5] text-[#081724] flex items-center justify-center hover:scale-105 transition-transform shadow-md"
-          title={isPlaying ? "Pause" : "Play"}
+          onClick={handleToggle}
+          className="w-9 h-9 rounded-full bg-[#91B9C5] hover:bg-[#a4cbd7] text-[#081724] flex items-center justify-center transition-all hover:scale-105 shadow-md cursor-pointer"
+          title={activeIsPlaying ? "Pause" : "Play Snippet"}
         >
-          {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
+          {activeIsPlaying ? (
+            <Pause className="w-4 h-4 fill-current" />
+          ) : (
+            <Play className="w-4 h-4 fill-current ml-0.5" />
+          )}
         </button>
 
-        <a
-          href={currentTrack.externalSongUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="p-2 text-[#91B9C5]/70 hover:text-white hover:bg-[#31566A]/40 rounded-xl transition-colors"
-          title="Open Track Link"
-        >
-          <ExternalLink className="w-4 h-4" />
-        </a>
-
-        <button
-          onClick={stopTrack}
-          className="p-2 text-[#91B9C5]/70 hover:text-red-400 hover:bg-[#31566A]/40 rounded-xl transition-colors"
-          title="Close player"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <span className="text-[11px] font-mono text-[#91B9C5]/80">
+          0:00 / 2:42
+        </span>
       </div>
 
-    </aside>
+    </footer>
   );
 }

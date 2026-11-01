@@ -57,7 +57,7 @@ public class Note {
     @Column(name = "emotion_tag", length = 50)
     private String emotionTag;
 
-    @Column(name = "sticker_badge", length = 50)
+    @Column(name = "sticker_badge", columnDefinition = "TEXT")
     private String stickerBadge;
 
     @Builder.Default

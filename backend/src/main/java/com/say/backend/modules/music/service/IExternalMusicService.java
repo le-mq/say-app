@@ -8,4 +8,8 @@ import java.util.concurrent.CompletableFuture;
 public interface IExternalMusicService {
 
     CompletableFuture<List<TrackSearchResponseDto>> searchMusic(String query, String platform);
+
+    List<TrackSearchResponseDto> getSharedPool();
+
+    void addToSharedPool(TrackSearchResponseDto track);
 }

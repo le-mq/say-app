@@ -27,6 +27,20 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
 
+# YouTube Data API Config
+youtube:
+  api:
+    key: ${YOUTUBE_API_KEY:}
+
+# Springdoc OpenAPI / Swagger UI
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
 ---
 # LOCAL PROFILE (Dev environment)
 spring:

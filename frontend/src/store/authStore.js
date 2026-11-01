@@ -1,17 +1,36 @@
 import { useState, useEffect } from 'react';
 
+const STORAGE_KEY = 'say_vault_user';
+
+const DEFAULT_USER = {
+  id: "a0000000-0000-0000-0000-000000000001",
+  email: "linhtran@say.fm",
+  displayName: "Linh Tran",
+  handle: "@linhtran",
+  avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+  bio: "Acoustic archiver & tape bias curator based in Berlin.",
+  audiophileRank: "Hi-Fi Master",
+  memberId: "#0492",
+  streakDays: 14,
+  bestStreakDays: 28,
+  notesCount: 3,
+};
+
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : DEFAULT_USER;
+  } catch (e) {
+    return DEFAULT_USER;
+  }
+}
+
 let listeners = [];
 let state = {
-  user: {
-    id: "a0000000-0000-0000-0000-000000000001",
-    email: "audiophile@say.fm",
-    displayName: "Sonic Wanderer",
-    avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-    bio: "Living between analog vinyl crackles and ethereal ambient waves.",
-    audiophileRank: "Vinyl Connoisseur",
-  },
-  activeTab: 'feed', // 'feed', 'profile', 'friends', 'landing'
+  user: getStoredUser(),
+  activeTab: 'feed',
   isStudioOpen: false,
+  isLoginModalOpen: false,
 };
 
 function notify() {
@@ -28,6 +47,13 @@ export const authStore = {
   },
   setUser: (user) => {
     state = { ...state, user };
+    try {
+      if (user) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+      } else {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (e) {}
     notify();
   },
   setActiveTab: (tab) => {
@@ -36,6 +62,36 @@ export const authStore = {
   },
   setStudioOpen: (open) => {
     state = { ...state, isStudioOpen: open };
+    notify();
+  },
+  setLoginModalOpen: (open) => {
+    state = { ...state, isLoginModalOpen: open };
+    notify();
+  },
+  loginAsGuest: () => {
+    const guestUser = {
+      id: "a0000000-0000-0000-0000-000000000002",
+      email: "guest@say.fm",
+      displayName: "@guest_listener",
+      avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&q=80",
+      bio: "Exploring the audiophile atmosphere in guest mode.",
+      audiophileRank: "Guest Explorer",
+    };
+    state = {
+      ...state,
+      user: guestUser,
+      isLoginModalOpen: false,
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(guestUser));
+    } catch (e) {}
+    notify();
+  },
+  logout: () => {
+    state = { ...state, user: null };
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {}
     notify();
   },
 };
@@ -53,5 +109,8 @@ export function useAuthStore() {
     setUser: authStore.setUser,
     setActiveTab: authStore.setActiveTab,
     setStudioOpen: authStore.setStudioOpen,
+    setLoginModalOpen: authStore.setLoginModalOpen,
+    loginAsGuest: authStore.loginAsGuest,
+    logout: authStore.logout,
   };
 }
