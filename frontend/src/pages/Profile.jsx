@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
 import MusicCard from '../components/MusicCard';
 import { 
   Flame, Trophy, Music, Lock, Plus, ChevronLeft, ChevronRight, 
   ChevronUp, ChevronDown, Play, Pause,
-  Edit3, Bookmark, Grid, List, Sparkles, Disc, ExternalLink, Moon
+  Edit3, Bookmark, Grid, List, Sparkles, Disc, ExternalLink, Moon, LogOut
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -17,8 +18,15 @@ const MONTH_NAMES = [
 const WEEKDAY_NAMES = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export default function Profile() {
-  const { user, setUser, setStudioOpen } = useAuthStore();
+  const { user, setUser, setStudioOpen, logout } = useAuthStore();
   const { currentTrack, isPlaying, playTrack } = usePlayerStore();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    toast.info("Logged out from SAY session");
+    navigate('/');
+  };
   
   // Real calendar state (defaults to May 2026)
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -373,6 +381,15 @@ export default function Profile() {
           >
             <Edit3 className="w-3.5 h-3.5 text-[#91B9C5]" />
             <span>{isEditingProfile ? "Close Edit" : "Edit Profile"}</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/30 hover:bg-rose-900/50 border border-rose-800/40 text-xs font-grotesk font-semibold text-rose-300 transition-all cursor-pointer shadow-sm"
+            title="Log Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Log Out</span>
           </button>
         </div>
 

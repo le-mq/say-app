@@ -7,6 +7,16 @@ export default {
   theme: {
     extend: {
       colors: {
+        say: {
+          bg: 'var(--color-bg)',
+          surface: 'var(--color-surface)',
+          elevated: 'var(--color-surface-elevated)',
+          primary: 'var(--color-primary)',
+          accent: 'var(--color-accent)',
+          text: 'var(--color-text)',
+          muted: 'var(--color-text-muted)',
+          cream: 'var(--color-note-cream)',
+        },
         midnight: {
           bg: "#081724",
           surface: "#142C40",

@@ -6,6 +6,7 @@ import Navbar from '../components/Navbar';
 import PlayerDock from '../components/PlayerDock';
 import StudioModal from '../components/StudioModal';
 import LoginModal from '../components/LoginModal';
+import SplashScreen from '../components/SplashScreen';
 
 export default function MainLayout() {
   const location = useLocation();
@@ -15,6 +16,9 @@ export default function MainLayout() {
     <div className={`min-h-screen bg-[#081724] text-[#E8EEF0] flex flex-col font-sans selection:bg-[#91B9C5] selection:text-[#081724] ${
       isFeed ? 'h-screen overflow-hidden' : ''
     }`}>
+      {/* Native App Opening Splash Screen */}
+      <SplashScreen />
+
       {/* Persistent Navigation Bar */}
       <Navbar />
 

@@ -1,6 +1,38 @@
 @import "tailwindcss";
 
+:root {
+  /* Dark Canvas Colors */
+  --color-bg: #081724;             /* Midnight Night - Nền chính */
+  --color-surface: #142C40;        /* Petrol Blue - Nền Card & Container */
+  --color-surface-elevated: #31566A;/* Ocean Blue - Floating UI, Modal, Tooltip */
+  
+  /* Brand & Interactive Accents */
+  --color-primary: #91B9C5;        /* Mist Blue - Waveform, Slider, Active State */
+  --color-accent: #B39DDB;         /* Dusty Lavender - Reaction, Mood, Highlight */
+  
+  /* Content & Typography */
+  --color-text: #E8EEF0;           /* Soft White - Chữ chính */
+  --color-text-muted: #A7B8C3;     /* Muted Blue Grey - Chữ phụ, Timestamp */
+  
+  /* Physical Music Note Surfaces */
+  --color-note-cream: #F2EDE3;     /* Warm Cream - Thẻ Receipt / Cassette giấy */
+  --color-note-text: #1C2833;       /* Chữ in máy trên nền Cream */
+  
+  /* Glassmorphism Overlays */
+  --glass-bg: rgba(20, 44, 64, 0.65);
+  --glass-border: rgba(145, 185, 197, 0.15);
+}
+
 @theme {
+  --color-say-bg: var(--color-bg);
+  --color-say-surface: var(--color-surface);
+  --color-say-elevated: var(--color-surface-elevated);
+  --color-say-primary: var(--color-primary);
+  --color-say-accent: var(--color-accent);
+  --color-say-text: var(--color-text);
+  --color-say-muted: var(--color-text-muted);
+  --color-say-cream: var(--color-note-cream);
+
   --color-midnight-bg: #081724;
   --color-midnight-surface: #142C40;
   --color-midnight-elevated: #31566A;
