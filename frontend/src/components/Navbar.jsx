@@ -28,7 +28,7 @@ export default function Navbar() {
   const handleLogout = () => {
     logout();
     setIsUserMenuOpen(false);
-    toast.info("Logged out from SAY session");
+    toast.info("You have signed out. See you next time!");
     navigate('/');
   };
 
@@ -116,26 +116,18 @@ export default function Navbar() {
         {/* 3. RIGHT SECTION: STUDIO AUDIO WAVE BUTTON & USER STATUS PILL */}
         <div className="flex items-center gap-3">
           
-          {/* Luminous Audiophile "Drop Note" Sonic Emblem Button */}
+          {/* Modern Audiophile "Create Note" Action Button */}
           <button
+            type="button"
             onClick={() => setStudioOpen(true)}
-            className="group relative flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500/20 via-[#122e44] to-purple-600/30 hover:from-cyan-400 hover:to-indigo-500 border border-cyan-400/50 hover:border-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.3)] hover:shadow-[0_0_28px_rgba(34,211,238,0.7)] transition-all duration-300 hover:scale-105 active:scale-95 cursor-pointer"
-            title="Press New Audio Note (+)"
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 h-9 rounded-full bg-gradient-to-r from-[#122e44] to-[#163852] hover:from-[#183d5a] hover:to-[#1e4d73] border border-[#23527a] hover:border-cyan-400/80 text-cyan-300 hover:text-white shadow-sm hover:shadow-[0_0_16px_rgba(34,211,238,0.35)] transition-all duration-200 cursor-pointer active:scale-95 group"
+            title="Create New Audio Note"
             aria-label="Create New Audio Note"
           >
-            {/* Spinning ambient vinyl groove */}
-            <div className="absolute inset-1 rounded-full border border-dashed border-cyan-300/30 group-hover:border-white/50 group-hover:animate-spin-slow pointer-events-none" />
-            
-            {/* Center Glowing Plus with Audio Spark */}
-            <div className="relative flex items-center justify-center">
-              <span className="text-cyan-300 group-hover:text-white font-mono text-lg font-bold leading-none select-none transition-colors">
-                +
-              </span>
-              <Sparkles className="w-2.5 h-2.5 text-cyan-400 group-hover:text-amber-300 absolute -top-1 -right-2 transition-transform duration-300 group-hover:scale-125" />
-            </div>
-
-            {/* Subtle sonic aura ping effect on hover */}
-            <div className="absolute -inset-0.5 rounded-full bg-cyan-400/20 blur-sm opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <Plus className="w-4 h-4 text-cyan-300 group-hover:text-cyan-200 transition-transform duration-300 group-hover:rotate-90 stroke-[2.5]" />
+            <span className="hidden sm:inline font-grotesk font-semibold text-xs text-[#E8EEF0] tracking-wide">
+              Create Note
+            </span>
           </button>
 
           {/* User Profile & Streak Pill with Dropdown Menu */}

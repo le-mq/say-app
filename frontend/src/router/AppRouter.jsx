@@ -13,14 +13,14 @@ const router = createBrowserRouter([
     path: '/',
     element: <MainLayout />,
     children: [
-      // Protected Community Routes
-      { index: true, element: <PrivateRoute Component={Feed} /> },
-      { path: 'feed', element: <PrivateRoute Component={Feed} /> },
+      // Public Feed Routes (Accessible directly to all visitors)
+      { index: true, element: <Feed /> },
+      { path: 'feed', element: <Feed /> },
       { path: 'profile', element: <PrivateRoute Component={Profile} /> },
       { path: 'friends', element: <PrivateRoute Component={Friends} /> },
 
-      // Public Discovery Routes
-      { path: 'landing', element: <Landing /> },
+      // Legacy Landing Route (Redirected to Feed)
+      { path: 'landing', element: <Navigate to="/feed" replace /> },
 
       // Error / Fallback Routes
       { path: '404', element: <NotFound /> },

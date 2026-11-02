@@ -11,10 +11,10 @@ export const apiClient = axios.create({
   },
 });
 
-// Request Interceptor: Attach authentication token if available
+// Request Interceptor: Attach authentication token if available (session-scoped)
 apiClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('say_token');
+    const token = sessionStorage.getItem('say_session_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -32,8 +32,8 @@ apiClient.interceptors.response.use(
     // Spring Boot standard ApiResponse format
     if (payload && typeof payload.success === 'boolean') {
       if (!payload.success) {
-        toast.error(payload.message || 'Operation failed');
-        return Promise.reject(new Error(payload.message || 'Operation failed'));
+        toast.error(payload.message || 'Something went wrong. Please try again.');
+        return Promise.reject(new Error(payload.message || 'Something went wrong. Please try again.'));
       }
       return payload.data;
     }

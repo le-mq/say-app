@@ -101,8 +101,13 @@ class CosmicStardustParticle {
   }
 }
 
+// Module-level guard: renders smoothly on every page reload / app launch,
+// but never disrupts client-side navigation between tabs
+let appHasMountedOnce = false;
+
 export default function SplashScreen({ onComplete }) {
   const [shouldRender, setShouldRender] = useState(() => {
+    // 1. URL parameter override: ?splash=1 or ?splash=true
     try {
       if (typeof window !== 'undefined') {
         const urlParams = new URLSearchParams(window.location.search);
@@ -110,10 +115,15 @@ export default function SplashScreen({ onComplete }) {
           return true;
         }
       }
-      return !sessionStorage.getItem(SPLASH_SESSION_KEY);
-    } catch {
+    } catch {}
+
+    // 2. Initial app launch / page refresh: ALWAYS show splash screen
+    if (!appHasMountedOnce) {
+      appHasMountedOnce = true;
       return true;
     }
+
+    return false;
   });
 
   // Stages:
@@ -129,9 +139,21 @@ export default function SplashScreen({ onComplete }) {
   const animFrameRef = useRef(null);
 
   useEffect(() => {
+    // Listen for custom trigger (e.g. after login)
+    const handleReplay = () => {
+      setStage(0);
+      setIsFadingOut(false);
+      setShouldRender(true);
+      requestAnimationFrame(() => setHasMounted(true));
+    };
+    window.addEventListener('say-show-splash', handleReplay);
+    return () => window.removeEventListener('say-show-splash', handleReplay);
+  }, []);
+
+  useEffect(() => {
     // Initial spring rise from y: 35 to y: 0
     requestAnimationFrame(() => setHasMounted(true));
-  }, []);
+  }, [shouldRender]);
 
   useEffect(() => {
     if (!shouldRender) {
@@ -170,9 +192,6 @@ export default function SplashScreen({ onComplete }) {
   }, [shouldRender]);
 
   const finishSplash = () => {
-    try {
-      sessionStorage.setItem(SPLASH_SESSION_KEY, 'true');
-    } catch {}
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     setShouldRender(false);
     if (onComplete) onComplete();

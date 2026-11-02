@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { CheckCircle2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import PlayerDock from '../components/PlayerDock';
 import StudioModal from '../components/StudioModal';
@@ -36,8 +37,7 @@ export default function MainLayout() {
       {/* Global Audiophile Login Modal */}
       <LoginModal />
 
-
-      {/* React Toastify Notification Container (Limited to 1 to prevent toast spam) */}
+      {/* React Toastify Notification Container with Custom Lucide SVG Icons */}
       <ToastContainer
         position="bottom-right"
         autoClose={2200}
@@ -50,13 +50,28 @@ export default function MainLayout() {
         draggable
         pauseOnHover
         theme="dark"
+        icon={({ type }) => {
+          switch (type) {
+            case 'success':
+              return <CheckCircle2 className="w-4 h-4 text-[#91B9C5] shrink-0" />;
+            case 'error':
+              return <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />;
+            case 'warning':
+              return <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />;
+            case 'info':
+            default:
+              return <Info className="w-4 h-4 text-[#91B9C5] shrink-0" />;
+          }
+        }}
         toastStyle={{
-          backgroundColor: '#142C40',
+          backgroundColor: '#0a1a29',
           color: '#E8EEF0',
-          border: '1px solid #31566A',
-          borderRadius: '16px',
-          overflow: 'hidden',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.4)',
+          border: '1px solid #1a3d5b',
+          borderRadius: '14px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+          fontSize: '13px',
+          fontFamily: 'Inter, system-ui, sans-serif',
+          padding: '12px 16px',
         }}
       />
     </div>

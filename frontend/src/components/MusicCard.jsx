@@ -3,8 +3,8 @@ import { toast } from 'react-toastify';
 import { usePlayerStore } from '../store/playerStore';
 import { 
   Play, Pause, Heart, Bookmark, MessageSquare, Plus, 
-  ExternalLink, Disc, Orbit, Sparkles, Flame, Coffee, 
-  Waves, Music, Users, Headphones, CloudRain, Star, Radio 
+  ExternalLink, Disc, Disc3, Orbit, Sparkles, Flame, Coffee, 
+  Waves, Music, Users, Headphones, CloudRain, Star, Radio, Moon
 } from 'lucide-react';
 import { formatTime } from '../services/musicService';
 
@@ -71,7 +71,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
     setReplySongTitle('');
     setReplyText('');
     setShowReplyInput(false);
-    toast.success("Song Dialogue reply posted! 🎵");
+    toast.success("Song Dialogue reply posted!");
     if (onReplyAdded) onReplyAdded(note.id);
   };
 
@@ -113,8 +113,8 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
     const BADGE_COMPONENTS = {
       // Animated / Motion Badges
       'Vinyl Spin': (
-        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center animate-spin-slow">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 border border-white/80" />
+        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center">
+          <Disc3 className="w-5 h-5 text-cyan-300 animate-spin-slow" />
         </div>
       ),
       'Neon Pulse': (
@@ -154,8 +154,8 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       // Tactile Wax Seals & Pins
       'Vinyl 33 RPM': (
-        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-purple-400/80 shadow-[0_0_12px_rgba(168,85,247,0.5)] flex items-center justify-center animate-spin-slow">
-          <div className="w-2.5 h-2.5 rounded-full bg-[#B39DDB]" />
+        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center animate-spin-slow">
+          <Disc3 className="w-5 h-5 text-cyan-300" />
         </div>
       ),
       'Crimson Wax': (
@@ -189,8 +189,8 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
         </div>
       ),
       'Vinyl': (
-        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center animate-spin-slow">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 border border-white/80" />
+        <div className="w-8 h-8 rounded-full bg-[#0a1520] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center">
+          <Disc3 className="w-5 h-5 text-cyan-300 animate-spin-slow" />
         </div>
       ),
       'Heartbeat': (
@@ -223,9 +223,14 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
           <Music className="w-4 h-4 text-indigo-300" />
         </div>
       ),
+      'Moon': (
+        <div className="w-8 h-8 rounded-full bg-[#1a1c2e] border-2 border-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.6)] flex items-center justify-center">
+          <Moon className="w-4 h-4 text-amber-200 fill-amber-200/40" />
+        </div>
+      ),
       'Orbit': (
-        <div className="w-8 h-8 rounded-full bg-[#1e1035] border-2 border-indigo-400 shadow-[0_0_14px_rgba(129,140,248,0.7)] flex items-center justify-center">
-          <Orbit className="w-4 h-4 text-indigo-300" />
+        <div className="w-8 h-8 rounded-full bg-[#1a1c2e] border-2 border-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.6)] flex items-center justify-center">
+          <Moon className="w-4 h-4 text-amber-200 fill-amber-200/40" />
         </div>
       ),
       'Flame Seal': (

@@ -160,7 +160,8 @@ export const formatTime = (secs) => {
 };
 
 export const parseDurationToSeconds = (dur) => {
-  if (!dur && dur !== 0) return 210;
+  if (dur === 0) return 0;
+  if (!dur) return 0;
   if (typeof dur === 'number') return dur;
   const parts = dur.toString().split(':').map(Number);
   if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
@@ -170,6 +171,6 @@ export const parseDurationToSeconds = (dur) => {
     return parts[0] * 3600 + parts[1] * 60 + parts[2];
   }
   const parsed = parseInt(dur, 10);
-  return isNaN(parsed) ? 210 : parsed;
+  return isNaN(parsed) ? 0 : parsed;
 };
 

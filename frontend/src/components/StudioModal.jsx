@@ -8,7 +8,7 @@ import { musicService, formatTime, parseDurationToSeconds } from '../services/mu
 import { noteService } from '../services/noteService';
 import MusicCard from './MusicCard';
 import {
-  X, Search, Sparkles, Disc, Play, Pause,
+  X, Search, Sparkles, Disc, Disc3, Play, Pause,
   Layers, Volume2, Link as LinkIcon, Radio,
   Flame, Music, Check, RefreshCw, Sliders,
   Upload, Image as ImageIcon, Smile, FileUp, MoveHorizontal,
@@ -42,14 +42,13 @@ const TRENDY_VIBES = [
   { tag: '🫧 Overthinking', text: 'staring at the ceiling letting this acoustic guitar heal me' },
 ];
 
-// Formik Validation (Allowing flexible track durations up to 24 hours)
+// Formik Validation (Strict real validation: requires title, artist, image and stream URL)
 const NoteValidationSchema = Yup.object().shape({
-  songTitle: Yup.string().required('Song title is required. Pick or search a track.'),
-  artistName: Yup.string().required('Artist name is required.'),
-  songImageUrl: Yup.string().required('Album artwork is required.'),
-  audioSnippetStart: Yup.number().min(0).max(86400).required(),
-  templateType: Yup.string().required(),
-  emotionTag: Yup.string().required(),
+  songTitle: Yup.string().trim().required('Song title is required. Pick or paste a track.'),
+  artistName: Yup.string().trim().required('Artist name is required.'),
+  songImageUrl: Yup.string().trim().required('Track image/artwork is required.'),
+  externalSongUrl: Yup.string().trim().required('Audio stream link is required.'),
+  audioSnippetStart: Yup.number().min(0).default(0),
 });
 
 // Slender Instagram/Spotify-style acoustic waveform matching user screenshot with rounded capsule bars
@@ -78,8 +77,8 @@ export default function StudioModal({ onNoteCreated }) {
   // Real YouTube Audio Preview Engine State
   const [isPreviewAudioPlaying, setIsPreviewAudioPlaying] = useState(false);
 
-  // Dynamic Audio Duration (Calculated dynamically from loaded track, default 210s)
-  const [trackDurationSec, setTrackDurationSec] = useState(210);
+  // Dynamic Audio Duration (0 by default when no song selected, updated when track is chosen)
+  const [trackDurationSec, setTrackDurationSec] = useState(0);
 
   // Shared Community Hot Tracks Pool (0 token usage across 1000 users)
   const [sharedHotPool, setSharedHotPool] = useState([]);
@@ -115,36 +114,46 @@ export default function StudioModal({ onNoteCreated }) {
       emotionTag: EMOTIONS[0].label,
       lyricSnippet: '',
       caption: '',
-      sealBadge: 'Orbit',
+      sealBadge: 'Moon',
       visibility: 'PUBLIC',
     },
     validationSchema: NoteValidationSchema,
     onSubmit: async (values, { setSubmitting, resetForm }) => {
       try {
+        if (!user?.id) {
+          toast.error('You must be signed in to publish a note.');
+          return;
+        }
+
         const payload = {
-          userId: user?.id || '00000000-0000-0000-0000-000000000001',
-          songTitle: values.songTitle,
-          artistName: values.artistName,
-          songImageUrl: values.songImageUrl,
-          externalSongUrl: values.externalSongUrl,
-          audioSnippetStart: values.audioSnippetStart,
-          templateType: values.templateType,
-          emotionTag: values.emotionTag,
+          userId: user.id,
+          songTitle: values.songTitle.trim(),
+          artistName: values.artistName.trim(),
+          songImageUrl: values.songImageUrl.trim(),
+          externalSongUrl: values.externalSongUrl.trim(),
+          audioSnippetStart: Number(values.audioSnippetStart) || 0,
+          templateType: values.templateType || 'CASSETTE',
+          emotionTag: values.emotionTag || '🌙 Melancholic',
           lyricSnippet: values.lyricSnippet.trim(),
           caption: values.caption.trim(),
-          stickerBadge: values.sealBadge,
-          visibility: values.visibility,
+          stickerBadge: values.sealBadge || 'Moon',
+          visibility: values.visibility || 'PUBLIC',
         };
 
+        // Real API Call without fake mocks or silent fallback notes
         const createdNote = await noteService.createNote(payload);
-        toast.success(`Published "${values.songTitle}" note successfully.`);
+
+        toast.success(`Published "${payload.songTitle}" note successfully.`);
         resetForm();
         setSearchResults([]);
         setQuery('');
-        if (onNoteCreated) onNoteCreated(createdNote);
+        setUrlInput('');
+        setTrackDurationSec(0);
+        if (onNoteCreated && createdNote) onNoteCreated(createdNote);
         setStudioOpen(false);
       } catch (err) {
-        toast.error(err.message || 'Failed to publish note');
+        const errorMsg = err.response?.data?.message || err.message || 'Failed to publish note to server';
+        toast.error(errorMsg);
       } finally {
         setSubmitting(false);
       }
@@ -253,7 +262,7 @@ export default function StudioModal({ onNoteCreated }) {
             const durSec = parseDurationToSeconds(resolved.duration);
             setTrackDurationSec(durSec);
           }
-          toast.success(`✨ Detected: ${resolved.songTitle} - ${resolved.artistName}`);
+          toast.success(`Track recognized: ${resolved.songTitle} - ${resolved.artistName}`);
         } else {
           toast.warn('Could not auto-fetch metadata. You can enter title & paste link.');
         }
@@ -273,9 +282,11 @@ export default function StudioModal({ onNoteCreated }) {
     formik.setFieldValue('artistName', '');
     formik.setFieldValue('songImageUrl', '');
     formik.setFieldValue('externalSongUrl', '');
+    formik.setFieldValue('audioSnippetStart', 0);
+    setTrackDurationSec(0);
     setIsPreviewAudioPlaying(false);
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    toast.info('Pasted track cleared. You can paste a new YouTube link!');
+    toast.info('Track cleared. You can paste a new YouTube link!');
   };
 
   // Select track from Shared Hot Pool (0 Token Cost)
@@ -452,11 +463,23 @@ export default function StudioModal({ onNoteCreated }) {
   useEffect(() => {
     if (!isDraggingRange.current) {
       setScrubSnippetStart(formik.values.audioSnippetStart);
+      if (trackDurationSec <= 0) {
+        if (selectionFrameRef.current) {
+          selectionFrameRef.current.style.display = 'none';
+        }
+        if (highlightedWaveformRef.current) {
+          highlightedWaveformRef.current.style.clipPath = 'polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%)';
+        }
+        return;
+      }
+      if (selectionFrameRef.current) {
+        selectionFrameRef.current.style.display = 'block';
+      }
       const leftP = (formik.values.audioSnippetStart / trackDurationSec) * 100;
       const rightP = (Math.min(trackDurationSec, formik.values.audioSnippetStart + snippetDuration) / trackDurationSec) * 100;
       if (selectionFrameRef.current) {
         selectionFrameRef.current.style.left = `${leftP}%`;
-        selectionFrameRef.current.style.width = `${(snippetDuration / trackDurationSec) * 100}%`;
+        selectionFrameRef.current.style.width = `${Math.min(100, (snippetDuration / trackDurationSec) * 100)}%`;
       }
       if (highlightedWaveformRef.current) {
         highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
@@ -472,6 +495,7 @@ export default function StudioModal({ onNoteCreated }) {
   const dynamicVerseTime = Math.floor(trackDurationSec * 0.12);
 
   const handleJumpToChorus = () => {
+    if (trackDurationSec <= 0) return;
     const targetSec = Math.min(dynamicChorusTime, Math.max(0, trackDurationSec - snippetDuration));
     setScrubSnippetStart(targetSec);
     formik.setFieldValue('audioSnippetStart', targetSec);
@@ -483,6 +507,7 @@ export default function StudioModal({ onNoteCreated }) {
   };
 
   const handleJumpToVerse = () => {
+    if (trackDurationSec <= 0) return;
     const targetSec = Math.min(dynamicVerseTime, Math.max(0, trackDurationSec - snippetDuration));
     setScrubSnippetStart(targetSec);
     formik.setFieldValue('audioSnippetStart', targetSec);
@@ -501,7 +526,7 @@ export default function StudioModal({ onNoteCreated }) {
 
   // Instant Audio Waveform Click-to-Jump Handler
   const handleWaveformClick = (e) => {
-    if (!waveformRef.current) return;
+    if (!waveformRef.current || trackDurationSec <= 0) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
@@ -522,7 +547,7 @@ export default function StudioModal({ onNoteCreated }) {
 
   // Pure 120 FPS Zero-Lag Direct DOM Scrubber Dragging with Hardware-Accelerated ClipPath
   const handleDragStart = (clientX) => {
-    if (!waveformRef.current) return;
+    if (!waveformRef.current || trackDurationSec <= 0) return;
     isDraggingRange.current = true;
     document.body.style.userSelect = 'none';
 
@@ -720,6 +745,16 @@ export default function StudioModal({ onNoteCreated }) {
     }
   };
 
+  const handlePublishClick = (e) => {
+    if (e) e.preventDefault();
+    if (!formik.values.songTitle?.trim() || !formik.values.externalSongUrl?.trim()) {
+      toast.info('Please pick or paste a track before publishing.');
+      setActiveSearchTab('url');
+      return;
+    }
+    formik.handleSubmit();
+  };
+
   if (!isStudioOpen) return null;
 
   return (
@@ -756,7 +791,7 @@ export default function StudioModal({ onNoteCreated }) {
             </button>
             <button
               type="button"
-              onClick={formik.handleSubmit}
+              onClick={handlePublishClick}
               disabled={formik.isSubmitting}
               className="px-5 py-1.5 rounded-xl bg-[#91B9C5] hover:bg-white text-[#07131e] font-grotesk font-bold text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
             >
@@ -1100,7 +1135,9 @@ export default function StudioModal({ onNoteCreated }) {
                     Audio snippet
                   </span>
                   <span ref={topTimeDisplayRef} className="text-[10px] font-mono text-[#91B9C5]/80">
-                    ({formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)} / {formatTime(trackDurationSec)})
+                    {trackDurationSec > 0
+                      ? `(${formatTime(activeSnippetStart)} – ${formatTime(activeSnippetEnd)} / ${formatTime(trackDurationSec)})`
+                      : '(--:-- / --:--)'}
                   </span>
                 </div>
 
@@ -1264,12 +1301,20 @@ export default function StudioModal({ onNoteCreated }) {
                 {/* Dynamic Timestamps matching User request: (1:49 – 2:19 / 3:30) */}
                 <div className="flex items-center justify-between text-xs font-mono select-none px-1">
                   <div className="flex items-center gap-1.5">
-                    <span ref={timeDisplayRef} className="font-bold text-white text-xs">
-                      {formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)}
-                    </span>
-                    <span className="text-[#91B9C5]/60 text-[11px] font-mono">
-                      / {formatTime(trackDurationSec)}
-                    </span>
+                    {trackDurationSec > 0 ? (
+                      <>
+                        <span ref={timeDisplayRef} className="font-bold text-white text-xs">
+                          {formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)}
+                        </span>
+                        <span className="text-[#91B9C5]/60 text-[11px] font-mono">
+                          / {formatTime(trackDurationSec)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[#91B9C5]/60 text-xs font-mono">
+                        --:-- / --:-- (Select track to preview)
+                      </span>
+                    )}
                   </div>
                   <span className="px-2.5 py-0.5 rounded-full bg-[#0d2233] border border-[#16354d] text-[10.5px] font-bold text-[#91B9C5] font-mono">
                     {snippetDuration}s snippet
@@ -1302,6 +1347,21 @@ export default function StudioModal({ onNoteCreated }) {
                     <span className="text-[10px] font-mono text-[#91B9C5]/60">({formatTime(dynamicVerseTime)})</span>
                   </button>
                 </div>
+
+                {/* Helpful Visual Snippet Indicator */}
+                {trackDurationSec <= 35 ? (
+                  <div className="flex items-center gap-2 p-2 rounded-xl bg-[#081724] border border-[#1d4363] text-[10.5px] font-mono text-[#91B9C5]">
+                    <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>
+                      Official 30s preview clip selected. To freely crop custom time stamps (e.g. chorus), paste any YouTube link above.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-[#91B9C5]/60 px-0.5">
+                    <Info className="w-3 h-3 text-[#91B9C5]/50 shrink-0" />
+                    <span>Drag the highlighted frame or click anywhere on the waveform to choose your snippet.</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1448,15 +1508,15 @@ export default function StudioModal({ onNoteCreated }) {
                   </button>
 
                   {[
-                    { icon: <Moon className="w-4 h-4 text-amber-200" />, label: 'Melancholic', badge: 'Orbit' },
+                    { icon: <Moon className="w-4 h-4 text-amber-200" />, label: 'Moon', badge: 'Moon' },
                     { icon: <Coffee className="w-4 h-4 text-amber-500" />, label: 'Coffee', badge: 'Midnight Coffee' },
                     { icon: <CloudRain className="w-4 h-4 text-sky-400" />, label: 'Rain', badge: 'Rain Drops' },
                     { icon: <Sparkles className="w-4 h-4 text-amber-300" />, label: 'Sparkle', badge: 'Star Shimmer' },
                     { icon: <Heart className="w-4 h-4 text-rose-400 fill-rose-500/20" />, label: 'Heartbeat', badge: 'Heartbeat' },
-                    { icon: <Disc className="w-4 h-4 text-cyan-300" />, label: 'Vinyl', badge: 'Vinyl Spin' },
+                    { icon: <Disc3 className="w-4 h-4 text-cyan-300" />, label: 'Vinyl', badge: 'Vinyl Spin' },
                     { icon: <Headphones className="w-4 h-4 text-indigo-300" />, label: 'Headphones', badge: 'Headphones' },
                   ].map((item, idx) => {
-                    const isSelected = formik.values.sealBadge === item.badge;
+                    const isSelected = formik.values.sealBadge === item.badge || (item.badge === 'Vinyl Spin' && formik.values.sealBadge === 'Vinyl');
                     return (
                       <button
                         key={idx}
@@ -1538,14 +1598,14 @@ export default function StudioModal({ onNoteCreated }) {
                     {/* 6 Iconic Enamel Badges with Lucide Icons */}
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                       {[
-                        { id: 'Vinyl', label: 'Vinyl', icon: <Disc className="w-5 h-5 text-cyan-300" /> },
+                        { id: 'Vinyl Spin', label: 'Vinyl', icon: <Disc3 className="w-5 h-5 text-cyan-300" /> },
                         { id: 'Headphones', label: 'Headphones', icon: <Headphones className="w-5 h-5 text-indigo-300" /> },
                         { id: 'Heartbeat', label: 'Heartbeat', icon: <Heart className="w-5 h-5 text-rose-400 fill-rose-500/20" /> },
                         { id: 'Equalizer', label: 'Equalizer', icon: <Sliders className="w-5 h-5 text-teal-300" /> },
                         { id: 'Floating notes', label: 'Notes', icon: <Music className="w-5 h-5 text-purple-300" /> },
                         { id: 'Orbit', label: 'Orbit', icon: <Globe className="w-5 h-5 text-amber-300" /> },
                       ].map((item) => {
-                        const isSelected = formik.values.sealBadge === item.id;
+                        const isSelected = formik.values.sealBadge === item.id || (item.id === 'Vinyl Spin' && formik.values.sealBadge === 'Vinyl');
                         return (
                           <button
                             key={item.id}
@@ -1695,7 +1755,13 @@ export default function StudioModal({ onNoteCreated }) {
             {/* Big Publish Note Button (Matching Image 1) */}
             <button
               type="button"
-              onClick={formik.handleSubmit}
+              onClick={() => {
+                if (!formik.values.songTitle?.trim() || !formik.values.externalSongUrl?.trim()) {
+                  toast.error("Please pick or paste a track before publishing.");
+                  return;
+                }
+                formik.handleSubmit();
+              }}
               disabled={formik.isSubmitting}
               className="w-full py-3.5 rounded-2xl bg-[#91B9C5] hover:bg-white text-[#07131e] font-grotesk font-extrabold text-sm shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
             >

@@ -24,7 +24,7 @@ export default function Profile() {
 
   const handleLogout = () => {
     logout();
-    toast.info("Logged out from SAY session");
+    toast.info("You have signed out. See you next time!");
     navigate('/');
   };
   
@@ -37,8 +37,20 @@ export default function Profile() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user?.displayName || 'Linh Tran');
   const [editHandle, setEditHandle] = useState(user?.handle || '@linhtran');
+  const [editHandleWarning, setEditHandleWarning] = useState('');
   const [editBio, setEditBio] = useState(user?.bio || 'Acoustic archiver & tape bias curator based in Berlin.');
   const [editRank, setEditRank] = useState(user?.audiophileRank || 'Hi-Fi Master');
+
+  const handleEditHandleChange = (val) => {
+    const raw = val.replace(/^@/, '');
+    if (/[^a-zA-Z0-9_.]/.test(raw)) {
+      setEditHandleWarning('Username cannot contain emojis, spaces, or symbols.');
+    } else {
+      setEditHandleWarning('');
+    }
+    const clean = raw.replace(/[^a-zA-Z0-9_.]/g, '');
+    setEditHandle(clean);
+  };
 
   // Vault Sub-Tabs: 'archive' (My Notes) | 'saved' (Saved Vault)
   const [activeVaultTab, setActiveVaultTab] = useState('archive');
@@ -259,16 +271,19 @@ export default function Profile() {
 
   const handleSaveProfile = (e) => {
     e.preventDefault();
+    const cleanUsername = editHandle.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'listener';
+    const formattedHandle = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
+
     const updated = {
       ...user,
       displayName: editName.trim() || 'Linh Tran',
-      handle: editHandle.trim().startsWith('@') ? editHandle.trim() : `@${editHandle.trim()}`,
+      handle: formattedHandle,
       bio: editBio.trim(),
       audiophileRank: editRank.trim(),
     };
     setUser(updated);
     setIsEditingProfile(false);
-    toast.success("Profile updated successfully! ✨");
+    toast.success("Profile updated successfully!");
   };
 
   // Filter notes based on selected day (if any)
@@ -400,22 +415,38 @@ export default function Profile() {
         <form onSubmit={handleSaveProfile} className="bg-[#091827] border border-[#1b3e5a] rounded-2xl p-5 space-y-3 animate-in fade-in duration-200 shadow-xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] font-grotesk uppercase text-[#91B9C5]/70 mb-1">Display Name</label>
+              <label className="block text-[10px] font-grotesk uppercase text-[#91B9C5]/70 mb-1">
+                Display Name (Keyboard Emojis Allowed)
+              </label>
               <input
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
+                placeholder="e.g. Linh Tran 🎧"
                 className="w-full bg-[#081724] border border-[#1b3d59] rounded-xl px-3 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5]"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-grotesk uppercase text-[#91B9C5]/70 mb-1">Handle</label>
-              <input
-                type="text"
-                value={editHandle}
-                onChange={(e) => setEditHandle(e.target.value)}
-                className="w-full bg-[#081724] border border-[#1b3d59] rounded-xl px-3 py-2 text-xs font-grotesk text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5]"
-              />
+              <label className="block text-[10px] font-grotesk uppercase text-[#91B9C5]/70 mb-1">
+                Username (@username - No Emojis)
+              </label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-[#91B9C5]/60 select-none">
+                  @
+                </span>
+                <input
+                  type="text"
+                  value={editHandle.replace(/^@/, '')}
+                  onChange={(e) => handleEditHandleChange(e.target.value)}
+                  placeholder="linhtran"
+                  className="w-full bg-[#081724] border border-[#1b3d59] rounded-xl pl-7 pr-3 py-2 text-xs font-mono text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5]"
+                />
+              </div>
+              {editHandleWarning && (
+                <span className="text-[10px] text-amber-300/90 mt-1 block font-medium">
+                  ⚠️ {editHandleWarning}
+                </span>
+              )}
             </div>
           </div>
 

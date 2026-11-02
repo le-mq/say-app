@@ -19,6 +19,15 @@ export const playerStore = {
       listeners = listeners.filter(l => l !== listener);
     };
   },
+  loadTrack: (track, snippetStart = 0) => {
+    state = {
+      ...state,
+      currentTrack: { ...track, snippetStart },
+      isPlaying: false,
+      currentTime: snippetStart,
+    };
+    notify();
+  },
   playTrack: (track, snippetStart = 0) => {
     state = {
       ...state,
@@ -53,9 +62,11 @@ export function usePlayerStore() {
 
   return {
     ...snapshot,
+    loadTrack: playerStore.loadTrack,
     playTrack: playerStore.playTrack,
     togglePlay: playerStore.togglePlay,
     pauseTrack: playerStore.pauseTrack,
     stopTrack: playerStore.stopTrack,
   };
 }
+

@@ -1,17 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { authService } from '../services/authService';
 import { X, Shield, FileText, ArrowLeft, CheckCircle, Sparkles, Lock } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 export default function LoginModal() {
+  const navigate = useNavigate();
   const { isLoginModalOpen, setLoginModalOpen, setUser, loginAsGuest } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Custom username onboarding after first Google login
-  const [showHandleModal, setShowHandleModal] = useState(false);
+  // Custom profile onboarding after first Google login
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [tempUser, setTempUser] = useState(null);
-  const [customHandle, setCustomHandle] = useState('');
+  const [customDisplayName, setCustomDisplayName] = useState('');
+  const [customUsername, setCustomUsername] = useState('');
+  const [usernameWarning, setUsernameWarning] = useState('');
 
   // Policy inspection state: null | 'terms' | 'privacy'
   const [activePolicy, setActivePolicy] = useState(null);
@@ -30,13 +34,26 @@ export default function LoginModal() {
 
   const handleClose = () => {
     setLoginModalOpen(false);
-    setShowHandleModal(false);
+    setShowProfileModal(false);
     setTempUser(null);
-    setCustomHandle('');
+    setCustomDisplayName('');
+    setCustomUsername('');
+    setUsernameWarning('');
     setActivePolicy(null);
   };
 
-  // Google Single Sign-On (Zero Password Storage)
+  const handleUsernameChange = (val) => {
+    const raw = val.replace(/^@/, '');
+    if (/[^a-zA-Z0-9_.]/.test(raw)) {
+      setUsernameWarning('Only letters, numbers, dot (.) and underscore (_) allowed. No emojis or spaces.');
+    } else {
+      setUsernameWarning('');
+    }
+    const clean = raw.replace(/[^a-zA-Z0-9_.]/g, '');
+    setCustomUsername(clean);
+  };
+
+  // Google Single Sign-On (Zero Password Storage & Zero Sensitive Data in localStorage)
   const handleGoogleLogin = async () => {
     setIsSubmitting(true);
     try {
@@ -61,14 +78,45 @@ export default function LoginModal() {
                   idToken: tokenResponse.access_token,
                 };
                 
-                const res = await authService.loginWithGoogle(payload);
-                const authenticatedUser = res.data?.data || payload;
+                let authenticatedUser = payload;
+                try {
+                  const res = await authService.loginWithGoogle(payload);
+                  const serverUser = res?.id ? res : (res?.data?.data || res?.data);
+                  if (serverUser && serverUser.id) {
+                    authenticatedUser = serverUser;
+                  }
+                } catch (backendErr) {
+                  console.warn("Backend auth sync skipped, fallback to client session:", backendErr);
+                }
 
-                setTempUser(authenticatedUser);
-                setCustomHandle(authenticatedUser.displayName.toLowerCase().replace(/\s+/g, '_'));
-                setShowHandleModal(true);
+                // SECURITY: Store session-scoped token in sessionStorage (NEVER in persistent localStorage)
+                const token = tokenResponse.access_token || ('say_tok_' + Date.now());
+                sessionStorage.setItem('say_session_token', token);
+                try {
+                  localStorage.removeItem('say_token');
+                } catch {}
+
+                const guaranteedId = authenticatedUser.id || ('usr_' + Math.random().toString(36).substring(2, 10));
+                const resolvedUser = {
+                  ...authenticatedUser,
+                  id: guaranteedId,
+                  token,
+                };
+
+                const initialDisplayName = authenticatedUser.displayName || 'Audiophile';
+                // Preserve casing while normalizing accents & spaces
+                const initialUsername = initialDisplayName
+                  .normalize('NFD')
+                  .replace(/[\u0300-\u036f]/g, '')
+                  .replace(/\s+/g, '_')
+                  .replace(/[^a-zA-Z0-9_.]/g, '');
+
+                setTempUser(resolvedUser);
+                setCustomDisplayName(initialDisplayName);
+                setCustomUsername(initialUsername || 'Listener');
+                setShowProfileModal(true);
               } catch (err) {
-                toast.error("Failed to sync profile with server");
+                toast.error("Unable to update profile. Please try again.");
               }
             }
           },
@@ -78,63 +126,97 @@ export default function LoginModal() {
         return;
       }
 
-      // Default seamless simulated authentication with backend
+      // Seamless simulated authentication
       const payload = {
         email: "audiophile.wanderer@gmail.com",
-        displayName: "Sonic Wanderer",
+        displayName: "Sonic Wanderer 🎧",
         avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
         idToken: "google-token-" + Date.now(),
       };
 
-      const res = await authService.loginWithGoogle(payload);
-      const userResult = res.data?.data || {
+      let userResult = {
         id: "a0000000-0000-0000-0000-000000000001",
         ...payload,
         bio: "Living between analog vinyl crackles and ethereal ambient waves.",
         audiophileRank: "Vinyl Connoisseur",
       };
 
+      try {
+        const res = await authService.loginWithGoogle(payload);
+        const serverUser = res?.id ? res : (res?.data?.data || res?.data);
+        if (serverUser && serverUser.id) {
+          userResult = serverUser;
+        }
+      } catch (err) {
+        console.warn("Backend auth unavailable, active in local session:", err);
+      }
+
+      sessionStorage.setItem('say_session_token', payload.idToken);
+      try {
+        localStorage.removeItem('say_token');
+      } catch {}
+
       setTempUser(userResult);
-      setCustomHandle(userResult.displayName.toLowerCase().replace(/\s+/g, '_'));
-      setShowHandleModal(true);
+      setCustomDisplayName("Sonic Wanderer 🎧");
+      setCustomUsername("SonicWanderer");
+      setShowProfileModal(true);
     } catch (err) {
       console.warn("Backend auth unavailable, active in local session:", err);
       const fallbackUser = {
         id: "a0000000-0000-0000-0000-000000000001",
-        email: "audiophile.wanderer@gmail.com",
-        displayName: "Sonic Wanderer",
+        displayName: "Sonic Wanderer 🎧",
         avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
         bio: "Living between analog vinyl crackles and ethereal ambient waves.",
         audiophileRank: "Vinyl Connoisseur",
       };
+      sessionStorage.setItem('say_session_token', 'local_tok_' + Date.now());
+      try {
+        localStorage.removeItem('say_token');
+      } catch {}
       setTempUser(fallbackUser);
-      setCustomHandle("sonic_wanderer");
-      setShowHandleModal(true);
+      setCustomDisplayName("Sonic Wanderer 🎧");
+      setCustomUsername("SonicWanderer");
+      setShowProfileModal(true);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Save customized Instagram-style username
-  const handleSaveHandle = async (e) => {
+  // Save customized display name (with keyboard icons) + unique username (allowing uppercase)
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    const finalDisplayName = customHandle.trim() || tempUser.displayName;
-    const formattedHandle = finalDisplayName.startsWith('@') ? finalDisplayName : `@${finalDisplayName}`;
-    
-    // Only persist public display info into client session
+    const finalDisplayName = customDisplayName.trim() || tempUser.displayName || 'Audiophile';
+    // Preserve uppercase letters in username, strictly no emojis or invalid chars
+    const cleanUsername = customUsername.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'Listener';
+    const formattedHandle = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
+    const userId = tempUser.id || ('usr_' + Math.random().toString(36).substring(2, 10));
+
+    // Security: Only store session token in sessionStorage, never in localStorage
+    if (tempUser.token) {
+      sessionStorage.setItem('say_session_token', tempUser.token);
+    }
+    try {
+      localStorage.removeItem('say_token');
+    } catch {}
+
+    // Public presentation profile ONLY - strictly NO sensitive data (no email, no password, no auth token)
     const safeUser = {
-      id: tempUser.id,
-      displayName: formattedHandle,
-      avatarUrl: tempUser.avatarUrl,
+      id: userId,
+      displayName: finalDisplayName, // Rich nickname with emojis & accents (Locket style)
+      handle: formattedHandle, // Unique @username with preserved casing
+      avatarUrl: tempUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
       audiophileRank: tempUser.audiophileRank || "Vinyl Connoisseur",
       bio: tempUser.bio || "Curating timeless records on SAY.",
+      streakDays: tempUser.streakDays || 14,
+      bestStreakDays: tempUser.bestStreakDays || 28,
+      notesCount: tempUser.notesCount || 3,
     };
 
     try {
-      if (tempUser.id) {
+      if (tempUser.id && String(tempUser.id).length > 20) {
         await authService.updateProfile(tempUser.id, {
-          ...tempUser,
-          displayName: formattedHandle,
+          displayName: finalDisplayName,
+          bio: safeUser.bio,
         });
       }
     } catch (err) {
@@ -142,8 +224,9 @@ export default function LoginModal() {
     }
 
     setUser(safeUser);
-    toast.success(`Welcome to SAY, ${formattedHandle}! 🎧`);
+    toast.success(`Welcome to SAY, ${finalDisplayName}!`);
     handleClose();
+    navigate('/feed');
   };
 
   return (
@@ -152,7 +235,7 @@ export default function LoginModal() {
       {/* Click outside backdrop */}
       <div className="absolute inset-0" onClick={handleClose} />
 
-      <div className="relative z-10 w-full max-w-[440px] flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative z-10 w-full max-w-[460px] flex flex-col items-center animate-in fade-in zoom-in-95 duration-200">
         
         {/* Main Card */}
         <div className="w-full relative rounded-[32px] bg-[#091827] border border-[#16354d]/90 shadow-[0_30px_70px_rgba(0,0,0,0.85)] p-7 sm:p-9 flex flex-col items-center text-center">
@@ -167,7 +250,7 @@ export default function LoginModal() {
           </button>
 
           {/* VIEW 1: REGULAR LOGIN FORM */}
-          {!activePolicy && !showHandleModal && (
+          {!activePolicy && !showProfileModal && (
             <>
               {/* Top Logo Squircle with Serif 'S' */}
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-b from-[#132c40] to-[#0a1824] border border-[#1e4463] flex items-center justify-center mb-5 shadow-inner ring-1 ring-white/5">
@@ -183,12 +266,12 @@ export default function LoginModal() {
 
               {/* Tagline */}
               <p className="font-mono text-xs sm:text-[13px] tracking-wide text-[#91B9C5] mb-2.5">
-                "Say it without saying it."
+                "Sound Around You"
               </p>
 
-              {/* Subtitle / Meaningful Vault Note */}
+              {/* Subtitle */}
               <p className="text-xs text-[#91B9C5]/80 max-w-[300px] leading-relaxed mb-8 font-sans">
-                Enter your private music journal. Google authentication keeps your listening vault secure.
+                Đăng nhập vào nhật ký âm nhạc của bạn. Không lưu trữ mật khẩu, hoàn toàn bảo mật.
               </p>
 
               {/* Action 1: Continue with Google Button */}
@@ -216,36 +299,41 @@ export default function LoginModal() {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.27 2.59 1.25 6.57l4.03 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
                   />
                 </svg>
-                <span>Continue with Google</span>
+                <span>Tiếp tục với Google</span>
               </button>
 
               {/* Divider with OR */}
               <div className="relative w-full flex items-center justify-center my-6">
                 <div className="w-full border-t border-[#183952]/70" />
                 <span className="absolute bg-[#091827] px-3 font-mono text-[10px] uppercase tracking-widest text-[#91B9C5]/50">
-                  OR
+                  HOẶC
                 </span>
               </div>
 
               {/* Action 2: Explore as guest listener */}
               <button
                 onClick={() => {
+                  sessionStorage.setItem('say_session_token', 'guest_tok_' + Date.now());
+                  try {
+                    localStorage.removeItem('say_token');
+                  } catch {}
                   loginAsGuest();
-                  toast.info("Exploring as Guest Listener. Vault read-only access active.");
+                  toast.info("Exploring as a Guest. Welcome to SAY!");
                   handleClose();
+                  navigate('/feed');
                 }}
                 className="font-mono text-xs text-[#91B9C5]/80 hover:text-[#E8EEF0] underline underline-offset-8 transition-colors cursor-pointer flex items-center justify-center gap-1 group pb-2"
               >
-                <span>Explore as guest listener</span>
+                <span>Explore as guest</span>
                 <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
               </button>
             </>
           )}
 
-          {/* VIEW 2: CUSTOMIZE INSTAGRAM-STYLE USERNAME / HANDLE */}
-          {!activePolicy && showHandleModal && (
-            <form onSubmit={handleSaveHandle} className="w-full flex flex-col items-center">
-              <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-[#91B9C5]/30 mb-4 shadow-lg">
+          {/* VIEW 2: CUSTOMIZE PROFILE (LOCKET-STYLE NICKNAME WITH EMOJIS + USERNAME) */}
+          {!activePolicy && showProfileModal && (
+            <form onSubmit={handleSaveProfile} className="w-full flex flex-col items-center">
+              <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-[#91B9C5]/30 mb-3 shadow-lg">
                 <img
                   src={tempUser?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80"}
                   alt="Avatar"
@@ -259,41 +347,77 @@ export default function LoginModal() {
               </div>
 
               <h2 className="font-serif text-2xl font-bold text-[#E8EEF0] mb-1">
-                Choose your Handle
+                Customize Your Profile
               </h2>
-              <p className="text-xs text-[#91B9C5]/80 max-w-[280px] mb-6">
-                Pick a unique Instagram-style username for your music journal & sonic aura.
+              <p className="text-xs text-[#91B9C5]/80 max-w-[320px] mb-5">
+                Set up your display name and unique handle to connect with friends.
               </p>
 
+              {/* Field 1: Tên hiển thị (Display Name) - Allows emojis/icons from keyboard */}
               <div className="w-full mb-4 text-left">
-                <label className="block text-[11px] font-mono text-[#91B9C5]/80 mb-1.5 uppercase tracking-wider">
-                  Audiophile Handle
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#91B9C5]/90 tracking-wide">
+                    Display Name
+                  </label>
+                  <span className="text-[10px] text-[#B39DDB] font-mono">
+                    Keyboard emojis & icons allowed
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  value={customDisplayName}
+                  onChange={(e) => setCustomDisplayName(e.target.value)}
+                  placeholder="e.g. Minh Quang 🎧"
+                  required
+                  maxLength={40}
+                  className="w-full bg-[#081724] border border-[#1b3e5a] rounded-xl px-3.5 py-2.5 text-sm text-[#E8EEF0] font-sans focus:outline-none focus:border-[#91B9C5] transition-colors"
+                />
+                <span className="text-[10px] text-[#91B9C5]/50 mt-1 block">
+                  Displayed on your music notes and profile. Emojis and full Unicode supported.
+                </span>
+              </div>
+
+              {/* Field 2: Tên người dùng (@username) - Strictly letters, numbers, dot, underscore. NO emojis. */}
+              <div className="w-full mb-6 text-left">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-[#91B9C5]/90 tracking-wide">
+                    Username (@username)
+                  </label>
+                  <span className="text-[10px] text-[#91B9C5]/60 font-mono">
+                    3 - 30 chars (A-Z, a-z, 0-9, _, .)
+                  </span>
+                </div>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[#91B9C5] text-sm">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono text-[#91B9C5] text-sm select-none">
                     @
                   </span>
                   <input
                     type="text"
-                    value={customHandle.replace(/^@/, '')}
-                    onChange={(e) => setCustomHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
-                    placeholder="your_handle"
+                    value={customUsername.replace(/^@/, '')}
+                    onChange={(e) => handleUsernameChange(e.target.value)}
+                    placeholder="MinhQuang"
                     required
+                    minLength={3}
                     maxLength={30}
-                    autoFocus
                     className="w-full bg-[#081724] border border-[#1b3e5a] rounded-xl pl-8 pr-3 py-2.5 text-sm text-[#E8EEF0] font-mono focus:outline-none focus:border-[#91B9C5] transition-colors"
                   />
                 </div>
-                <span className="text-[10px] text-[#91B9C5]/50 mt-1 block font-mono">
-                  Letters, numbers, underscores and periods only.
-                </span>
+                {usernameWarning ? (
+                  <span className="text-[10px] text-amber-300/90 mt-1 block font-medium">
+                    ⚠️ {usernameWarning}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-[#91B9C5]/50 mt-1 block">
+                    Case-preserved (e.g. @MinhQuang). Strictly letters, numbers, '.' and '_'. No emojis or spaces.
+                  </span>
+                )}
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-[#91B9C5] hover:bg-[#B39DDB] text-[#081724] font-extrabold text-xs tracking-wider uppercase font-mono transition-all duration-200 cursor-pointer shadow-lg hover:scale-[1.02]"
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#91B9C5] to-[#B39DDB] hover:from-[#A2C7D3] hover:to-[#C1ACE8] text-[#081724] font-extrabold text-xs tracking-wider uppercase font-mono transition-all duration-200 cursor-pointer shadow-lg hover:scale-[1.02]"
               >
-                Confirm & Enter Vault →
+                Confirm & Enter Feed →
               </button>
             </form>
           )}

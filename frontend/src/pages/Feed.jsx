@@ -82,12 +82,20 @@ const INITIAL_FEED_NOTES = [
 
 export default function Feed() {
   const { user } = useAuthStore();
-  const { playTrack, isPlaying } = usePlayerStore();
+  const { playTrack, loadTrack, isPlaying } = usePlayerStore();
   const [notes, setNotes] = useState(INITIAL_FEED_NOTES);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isAutoPlay, setIsAutoPlay] = useState(false);
   const lastScrollTime = useRef(0);
   const touchStartY = useRef(0);
+  const hasUserStartedPlayingRef = useRef(false);
+
+  // Track when user actively triggers playback
+  useEffect(() => {
+    if (isPlaying) {
+      hasUserStartedPlayingRef.current = true;
+    }
+  }, [isPlaying]);
 
   // Dynamic Generator for Infinite Audiophile Stream (Never runs out)
   const generateMoreNotes = (batchNum) => [
@@ -184,18 +192,27 @@ export default function Feed() {
     return () => clearInterval(timer);
   }, [isAutoPlay]);
 
-  // Sync music: automatically play the active note's music in bottom dock
+  // Sync music: load paused on entry for user autonomy, or play if user is actively listening
   useEffect(() => {
     if (notes && notes[activeIndex]) {
       const activeNote = notes[activeIndex];
-      playTrack({
+      const trackPayload = {
         id: activeNote.id,
         songTitle: activeNote.songTitle,
         artistName: `${activeNote.artistName} • Lossless 24-Bit DAC`,
         songImageUrl: activeNote.songImageUrl,
         audioSnippetStart: activeNote.audioSnippetStart || '0:10',
         duration: 162,
-      });
+      };
+
+      if (!hasUserStartedPlayingRef.current) {
+        // Initial entry: Keep paused in dock so the user has full control and isn't startled
+        loadTrack(trackPayload);
+      } else if (isPlaying) {
+        playTrack(trackPayload);
+      } else {
+        loadTrack(trackPayload);
+      }
     }
   }, [activeIndex, notes]);
 
