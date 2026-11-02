@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
 import { usePlayerStore } from '../store/playerStore';
-import { Play, Pause, Heart, Bookmark, MessageSquare, Plus, ExternalLink, Disc } from 'lucide-react';
+import { 
+  Play, Pause, Heart, Bookmark, MessageSquare, Plus, 
+  ExternalLink, Disc, Orbit, Sparkles, Flame, Coffee, 
+  Waves, Music, Users, Headphones, CloudRain, Star, Radio 
+} from 'lucide-react';
+import { formatTime } from '../services/musicService';
 
 export default function MusicCard({ note, onReplyAdded, compact = false }) {
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
@@ -119,32 +124,32 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       'Star Shimmer': (
         <div className="w-8 h-8 rounded-full bg-amber-950/90 border-2 border-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.7)] flex items-center justify-center">
-          <span className="text-xs animate-pulse">✨</span>
+          <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
         </div>
       ),
       'Rain Drops': (
         <div className="w-8 h-8 rounded-full bg-sky-950/90 border-2 border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)] flex items-center justify-center">
-          <span className="text-xs">🌧️</span>
+          <CloudRain className="w-4 h-4 text-sky-400" />
         </div>
       ),
       'Lo-Fi Cat': (
         <div className="w-8 h-8 rounded-full bg-[#1b263b] border-2 border-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.6)] flex items-center justify-center">
-          <span className="text-xs">🐱</span>
+          <Radio className="w-4 h-4 text-purple-300" />
         </div>
       ),
       'Cassette Reel': (
         <div className="w-8 h-8 rounded-xl bg-[#142330] border-2 border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)] flex items-center justify-center">
-          <span className="text-xs">📼</span>
+          <Disc className="w-4 h-4 text-amber-400" />
         </div>
       ),
       'Cosmic Orbit': (
         <div className="w-8 h-8 rounded-full bg-[#1e1035] border-2 border-indigo-400 shadow-[0_0_14px_rgba(129,140,248,0.7)] flex items-center justify-center">
-          <span className="text-xs">🪐</span>
+          <Orbit className="w-4 h-4 text-indigo-300" />
         </div>
       ),
       'Midnight Coffee': (
         <div className="w-8 h-8 rounded-full bg-[#241711] border-2 border-amber-600 shadow-[0_0_10px_rgba(217,119,6,0.5)] flex items-center justify-center">
-          <span className="text-xs">☕</span>
+          <Coffee className="w-4 h-4 text-amber-500" />
         </div>
       ),
       // Tactile Wax Seals & Pins
@@ -160,7 +165,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       'Hologram Star': (
         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-purple-600 to-cyan-400 border border-white/80 shadow-[0_0_12px_rgba(255,255,255,0.7)] flex items-center justify-center">
-          <span className="text-xs">⭐</span>
+          <Star className="w-4 h-4 text-amber-200 fill-amber-200" />
         </div>
       ),
       'Washi Tape': (
@@ -170,17 +175,17 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       'Dark Rose': (
         <div className="w-8 h-8 rounded-full bg-[#1a0f14] border-2 border-rose-500/80 shadow-[0_0_10px_rgba(244,63,94,0.4)] flex items-center justify-center">
-          <span className="text-xs">🥀</span>
+          <Flame className="w-4 h-4 text-rose-400" />
         </div>
       ),
       'Hi-Fi Headphones': (
         <div className="w-8 h-8 rounded-full bg-[#0b1c2b] border-2 border-cyan-400/80 shadow-[0_0_10px_rgba(34,211,238,0.5)] flex items-center justify-center">
-          <span className="text-xs">🎧</span>
+          <Headphones className="w-4 h-4 text-cyan-400" />
         </div>
       ),
       'Headphones': (
         <div className="w-8 h-8 rounded-full bg-[#0b1c2b] border-2 border-cyan-400/80 shadow-[0_0_10px_rgba(34,211,238,0.5)] flex items-center justify-center">
-          <span className="text-xs">🎧</span>
+          <Headphones className="w-4 h-4 text-cyan-400" />
         </div>
       ),
       'Vinyl': (
@@ -190,7 +195,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       'Heartbeat': (
         <div className="w-8 h-8 rounded-full bg-purple-950/90 border-2 border-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.6)] flex items-center justify-center">
-          <span className="text-xs animate-pulse">💜</span>
+          <Heart className="w-4 h-4 text-purple-300 fill-purple-300 animate-pulse" />
         </div>
       ),
       'Equalizer': (
@@ -215,27 +220,27 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
       ),
       'Floating notes': (
         <div className="w-8 h-8 rounded-full bg-[#101b2b] border-2 border-indigo-400 shadow-[0_0_12px_rgba(129,140,248,0.6)] flex items-center justify-center">
-          <span className="text-xs">🎵</span>
+          <Music className="w-4 h-4 text-indigo-300" />
         </div>
       ),
       'Orbit': (
         <div className="w-8 h-8 rounded-full bg-[#1e1035] border-2 border-indigo-400 shadow-[0_0_14px_rgba(129,140,248,0.7)] flex items-center justify-center">
-          <span className="text-xs">🪐</span>
+          <Orbit className="w-4 h-4 text-indigo-300" />
         </div>
       ),
       'Flame Seal': (
         <div className="w-8 h-8 rounded-full bg-[#261005] border-2 border-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.6)] flex items-center justify-center">
-          <span className="text-xs">🔥</span>
+          <Flame className="w-4 h-4 text-orange-400" />
         </div>
       ),
       'Zen Leaf': (
         <div className="w-8 h-8 rounded-full bg-[#0c2417] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] flex items-center justify-center">
-          <span className="text-xs">🍃</span>
+          <Sparkles className="w-4 h-4 text-emerald-400" />
         </div>
       ),
       'Ocean Wave': (
         <div className="w-8 h-8 rounded-full bg-[#092233] border-2 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)] flex items-center justify-center">
-          <span className="text-xs">🌊</span>
+          <Waves className="w-4 h-4 text-cyan-400" />
         </div>
       ),
     };
@@ -276,8 +281,9 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
         {/* Emotion / Privacy Badges */}
         <div className="flex items-center gap-1.5">
           {note.visibility === 'FRIENDS' && (
-            <span className="text-[9px] font-grotesk px-2 py-0.5 rounded-full bg-[#142c40] text-[#91B9C5] border border-[#1e4566]">
-              👥 Friends
+            <span className="text-[9px] font-grotesk px-2 py-0.5 rounded-full bg-[#142c40] text-[#91B9C5] border border-[#1e4566] flex items-center gap-1">
+              <Users className="w-2.5 h-2.5" />
+              <span>Friends</span>
             </span>
           )}
           {note.emotionTag && (
@@ -320,13 +326,13 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
                   {note.artistName || "KHRUANGBIN VIBE"}
                 </p>
                 <p className="text-[7.5px] text-neutral-600 uppercase mt-0.5">
-                  CLIP: {note.audioSnippetStart || "0:10"}-{note.audioSnippetEnd || "0:40"}
+                  CLIP: {formatTime(note.audioSnippetStart || "0:10")} - {formatTime(note.audioSnippetEnd || "0:40")}
                 </p>
               </div>
 
               {/* Lyric Snippet Box (High-Contrast Bold Italic Serif) */}
               {note.lyricSnippet && (
-                <div className="my-1.5 p-1.5 bg-[#dfd6c4]/90 border-l-3 border-neutral-900 text-[10.5px] font-serif italic font-bold tracking-wide leading-snug text-neutral-900 line-clamp-2">
+                <div className="my-1 p-1 bg-[#dfd6c4]/90 border-l-3 border-neutral-900 text-[9.5px] font-serif italic font-bold tracking-wide leading-tight text-neutral-900 line-clamp-2 break-words">
                   "{note.lyricSnippet}"
                 </div>
               )}
@@ -334,7 +340,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
               {/* Personal Reflection */}
               {note.caption && (
                 <div className="text-[8px] leading-tight text-neutral-800 flex items-start gap-1 line-clamp-1 mt-0.5">
-                  <span>🪐</span>
+                  <Sparkles className="w-2.5 h-2.5 text-neutral-600 shrink-0 mt-0.5" />
                   <span>"{note.caption}"</span>
                 </div>
               )}
@@ -405,7 +411,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
               </p>
 
               {note.lyricSnippet && (
-                <p className="mt-1.5 text-[10.5px] font-serif italic font-bold text-amber-100 tracking-wide leading-snug line-clamp-2 border-l-2 border-amber-300 pl-2 drop-shadow-sm">
+                <p className="mt-1 text-[9.5px] font-serif italic font-bold text-amber-100 tracking-wide leading-tight line-clamp-2 border-l-2 border-amber-300 pl-1.5 break-words drop-shadow-sm">
                   "{note.lyricSnippet}"
                 </p>
               )}
@@ -467,7 +473,7 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
               </div>
 
               {note.lyricSnippet && (
-                <p className="text-[10.5px] font-serif italic font-bold text-neutral-900 border-l-3 border-neutral-800 pl-2 my-1.5 line-clamp-2 leading-snug tracking-wide">
+                <p className="text-[9.5px] font-serif italic font-bold text-neutral-900 border-l-3 border-neutral-800 pl-1.5 my-1 line-clamp-2 leading-tight tracking-wide break-words">
                   "{note.lyricSnippet}"
                 </p>
               )}
@@ -514,13 +520,13 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
                   {note.artistName}
                 </p>
                 <span className="text-[8px] text-cyan-400 font-mono mt-0.5 inline-block">
-                  CLIP: {note.audioSnippetStart || '0:10'} - {note.audioSnippetEnd || '0:40'}
+                  CLIP: {formatTime(note.audioSnippetStart || '0:10')} - {formatTime(note.audioSnippetEnd || '0:40')}
                 </span>
               </div>
             </div>
 
             {note.lyricSnippet && (
-              <div className="p-2 rounded-lg bg-[#07131e]/90 border border-[#16354d] border-l-3 border-l-cyan-400 text-[10.5px] font-serif italic font-bold text-cyan-100 leading-snug tracking-wide line-clamp-2 drop-shadow-sm">
+              <div className="p-1.5 rounded-lg bg-[#07131e]/90 border border-[#16354d] border-l-3 border-l-cyan-400 text-[9.5px] font-serif italic font-bold text-cyan-100 leading-tight tracking-wide line-clamp-2 break-words drop-shadow-sm">
                 "{note.lyricSnippet}"
               </div>
             )}
@@ -539,57 +545,82 @@ export default function MusicCard({ note, onReplyAdded, compact = false }) {
 
             <div className="flex justify-between items-center text-[8.5px] text-cyan-300 uppercase tracking-widest pb-0.5 border-b border-[#18314a] z-10 pr-16">
               <span className="flex items-center gap-1">
-                <span>🪐</span> COSMIC ORBIT CANVAS
+                <Orbit className="w-3 h-3 text-cyan-300 shrink-0" />
+                <span>COSMIC ORBIT CANVAS</span>
               </span>
-              <span className="text-purple-300 font-bold">INTERSTELLAR</span>
+              <span className="text-purple-300 font-bold truncate max-w-[90px]">
+                {note.emotionTag ? note.emotionTag.toUpperCase() : "INTERSTELLAR"}
+              </span>
             </div>
 
-            {/* Concentric Rounded Square Orbit Matrix Matching Screenshot 4 */}
-            <div className="relative w-full h-[125px] flex items-center justify-center my-0.5 overflow-hidden">
+            {/* Concentric Rounded Square Orbit Matrix Personalized */}
+            <div className="relative w-full h-[112px] flex items-center justify-center my-0.5 overflow-hidden">
               {/* Outer Orbit Rounded Square */}
-              <div className="absolute w-[185px] h-[105px] rounded-2xl border border-cyan-500/20 flex items-center justify-center">
-                {/* Orbiting Planet 1: Lavender (Khruangbin) */}
-                <div className="absolute -top-1.5 left-4 flex items-center gap-1 bg-[#06101c]/90 px-1 rounded-full border border-purple-400/40">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#B39DDB] shadow-[0_0_8px_#B39DDB]" />
-                  <span className="text-[7.5px] font-mono text-[#B39DDB] font-bold">Khruangbin</span>
+              <div className="absolute w-[180px] h-[96px] rounded-2xl border border-cyan-500/20 flex items-center justify-center">
+                {/* Orbiting Planet 1: Lavender (Personalized Artist) */}
+                <div className="absolute -top-1.5 left-3 flex items-center gap-1 bg-[#06101c]/90 px-1.5 py-0.5 rounded-full border border-purple-400/40 max-w-[100px] shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-[#B39DDB] shadow-[0_0_8px_#B39DDB] shrink-0" />
+                  <span className="text-[7.5px] font-mono text-[#B39DDB] font-bold truncate">
+                    {note.artistName || "Artist"}
+                  </span>
                 </div>
 
-                {/* Orbiting Planet 2: Cyan (Bon Iver) */}
-                <div className="absolute -bottom-1.5 right-4 flex items-center gap-1 bg-[#06101c]/90 px-1 rounded-full border border-cyan-400/40">
-                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_cyan]" />
-                  <span className="text-[7.5px] font-mono text-cyan-300 font-bold">Bon Iver</span>
+                {/* Orbiting Planet 2: Cyan (Personalized Tag / Mood) */}
+                <div className="absolute -bottom-1.5 right-3 flex items-center gap-1 bg-[#06101c]/90 px-1.5 py-0.5 rounded-full border border-cyan-400/40 max-w-[90px] shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_cyan] shrink-0" />
+                  <span className="text-[7.5px] font-mono text-cyan-300 font-bold truncate">
+                    {note.emotionTag || note.visibility || "Cosmic"}
+                  </span>
                 </div>
               </div>
 
               {/* Middle Orbit Rounded Square */}
-              <div className="absolute w-[130px] h-[75px] rounded-xl border border-indigo-400/30 flex items-center justify-center">
-                {/* Orbiting Planet 3: Pale Gold (Nick Drake) */}
-                <div className="absolute -top-1 right-2 flex items-center gap-1 bg-[#06101c]/90 px-1 rounded-full border border-amber-300/40">
-                  <div className="w-2 h-2 rounded-full bg-amber-200 shadow-[0_0_6px_#fde68a]" />
-                  <span className="text-[7px] font-mono text-amber-200 font-bold">Nick Drake</span>
+              <div className="absolute w-[124px] h-[66px] rounded-xl border border-indigo-400/30 flex items-center justify-center">
+                {/* Orbiting Planet 3: Pale Gold (Personalized Snippet Time or Badge) */}
+                <div className="absolute -top-1.5 right-2 flex items-center gap-1 bg-[#06101c]/90 px-1.5 py-0.5 rounded-full border border-amber-300/40 shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-amber-200 shadow-[0_0_6px_#fde68a] shrink-0" />
+                  <span className="text-[7px] font-mono text-amber-200 font-bold">
+                    {note.audioSnippetStart != null ? `${formatTime(note.audioSnippetStart)} – ${formatTime(note.audioSnippetEnd || (typeof note.audioSnippetStart === 'number' ? note.audioSnippetStart + 30 : null))}` : "30s snippet"}
+                  </span>
                 </div>
               </div>
 
-              {/* Center Core Hub (Acoustic Gravitational Core) */}
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-900/60 to-purple-900/60 border border-white/30 flex items-center justify-center shadow-lg z-10">
-                <div className="w-3.5 h-3.5 rounded-full bg-cyan-300/80 animate-pulse shadow-[0_0_10px_cyan]" />
+              {/* Center Core Hub (Acoustic Gravitational Planetary Hub with Song Cover) */}
+              <div className="relative w-11 h-11 rounded-full p-0.5 bg-gradient-to-tr from-cyan-400 via-indigo-500 to-purple-500 shadow-[0_0_18px_rgba(34,211,238,0.5)] z-10 shrink-0">
+                <div className="w-full h-full rounded-full overflow-hidden bg-black/90 flex items-center justify-center border border-white/20">
+                  {note.songImageUrl ? (
+                    <img
+                      src={note.songImageUrl}
+                      alt={note.songTitle || "Song Cover"}
+                      className={`w-full h-full object-cover ${isCurrentPlaying ? 'animate-[spin_18s_linear_infinite]' : ''}`}
+                    />
+                  ) : (
+                    <div className="w-3.5 h-3.5 rounded-full bg-cyan-300/80 animate-pulse shadow-[0_0_10px_cyan]" />
+                  )}
+                </div>
+                <div className="absolute -inset-1 rounded-full border border-cyan-400/30 animate-ping pointer-events-none" style={{ animationDuration: '3.5s' }} />
               </div>
             </div>
 
             {/* Bottom Song & Cosmic Lyric snippet */}
-            <div className="z-10 bg-[#040a12]/90 p-1.5 rounded-xl border border-indigo-500/20 flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <h4 className="font-extrabold text-[10px] text-[#E8EEF0] uppercase tracking-wide truncate">
-                  {note.songTitle || "COSMIC DEEP SPACE RESONANCE"}
-                </h4>
-                <p className="text-[8px] text-[#91B9C5] truncate">
-                  {note.artistName || "Voyager Space Archive"}
-                </p>
+            <div className="z-10 bg-[#040a12]/95 p-2 rounded-xl border border-indigo-500/25 flex flex-col gap-1 backdrop-blur-md">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-extrabold text-[10.5px] text-[#E8EEF0] uppercase tracking-wide truncate">
+                    {note.songTitle || "COSMIC DEEP SPACE RESONANCE"}
+                  </h4>
+                  <p className="text-[8px] text-[#91B9C5] truncate">
+                    {note.artistName || "Voyager Space Archive"}
+                  </p>
+                </div>
+                <span className="text-[7.5px] font-mono px-2 py-0.5 rounded-full bg-indigo-950/80 text-cyan-300 border border-cyan-500/30 shrink-0">
+                  {note.emotionTag || "ORBIT"}
+                </span>
               </div>
               {note.lyricSnippet && (
-                <span className="text-[9.5px] font-serif italic font-bold text-purple-100 truncate max-w-[140px] ml-1 tracking-wide drop-shadow-sm">
+                <p className="text-[9px] font-serif italic font-medium text-purple-100/95 leading-snug line-clamp-2 border-l-2 border-cyan-400/60 pl-1.5 break-words">
                   "{note.lyricSnippet}"
-                </span>
+                </p>
               )}
             </div>
           </div>

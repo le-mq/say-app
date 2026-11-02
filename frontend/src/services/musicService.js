@@ -16,6 +16,80 @@ export const musicService = {
     return match ? match[1] : null;
   },
 
+  // Clean video titles removing noise keywords like Official MV, Theme Song, etc.
+  // Preserves exact original song title and artist names to respect artists.
+  cleanMetadata: (rawTitle = '', authorName = '') => {
+    if (!rawTitle) {
+      return { songTitle: '', artistName: authorName || '' };
+    }
+
+    let text = rawTitle.trim();
+    if (text.includes('|')) {
+      const segs = text.split('|');
+      if (segs[0].trim().length >= 2) {
+        text = segs[0].trim();
+      }
+    } else if (text.includes('//')) {
+      const segs = text.split('//');
+      if (segs[0].trim().length >= 2) {
+        text = segs[0].trim();
+      }
+    }
+
+    // 2. Strip bracketed & parenthesized noise tags without altering original song or artist names
+    const noisePatterns = [
+      /\s*\([^)]*(?:Theme\s*Song|Nhạc\s*[Pp]him|OST|Soundtrack|Official(?:\s*(?:MV|Music\s*Video|Audio))?|MV(?:\s*Official)?|Lyrics?|Lyric\s*Video|Lời\s*bài\s*hát|Vietsub|Audio|Bản\s*chuẩn|Karaoke|Teaser|Trailer|4K|8K|60FPS|HD|Full\s*HD|1080p)[^)]*\)\s*/gi,
+      /\s*\[[^\]]*(?:Theme\s*Song|Nhạc\s*[Pp]him|OST|Soundtrack|Official(?:\s*(?:MV|Music\s*Video|Audio))?|MV(?:\s*Official)?|Lyrics?|Lyric\s*Video|Lời\s*bài\s*hát|Vietsub|Audio|Bản\s*chuẩn|Karaoke|Teaser|Trailer|4K|8K|60FPS|HD|Full\s*HD|1080p)[^\]]*\]\s*/gi,
+      /\s*[\[\(]\s*(?:MV|Official|Audio|Lyrics?|Vietsub|4K)\s*[\]\)]\s*$/gi,
+    ];
+
+    for (const pat of noisePatterns) {
+      text = text.replace(pat, ' ');
+    }
+
+    // Normalize whitespace
+    text = text.replace(/\s+/g, ' ').trim();
+
+    // 3. Separate Song Title and Artist Name
+    let song = text;
+    let artist = (authorName || '')
+      .replace(/\s*-\s*Topic$/i, '')
+      .replace(/\s*Official.*$/i, '')
+      .replace(/\s*Channel.*$/i, '')
+      .trim();
+
+    const separatorMatch = text.match(/\s+[-–—]\s+/);
+    if (separatorMatch) {
+      const sep = separatorMatch[0];
+      const parts = text.split(sep);
+      const part0 = parts[0].trim();
+      const part1 = parts.slice(1).join(sep).trim();
+
+      const authorClean = (authorName || '')
+        .toLowerCase()
+        .replace(/official|topic|channel|vevo|music/gi, '')
+        .trim();
+      const part0Lower = part0.toLowerCase();
+      const part1Lower = part1.toLowerCase();
+
+      if (authorClean && authorClean.length >= 2 && part0Lower.includes(authorClean)) {
+        artist = part0;
+        song = part1;
+      } else if (authorClean && authorClean.length >= 2 && part1Lower.includes(authorClean)) {
+        song = part0;
+        artist = part1;
+      } else {
+        song = part0;
+        artist = part1 || artist;
+      }
+    }
+
+    return {
+      songTitle: song.trim() || 'Untitled Track',
+      artistName: artist.trim() || 'Artist',
+    };
+  },
+
   // Zero-token Instant YouTube metadata resolution via YouTube oEmbed CDN (0 API units)
   resolveYoutubeUrl: async (url) => {
     const videoId = musicService.extractYoutubeId(url);
@@ -26,41 +100,76 @@ export const musicService = {
 
     try {
       const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(cleanUrl)}`);
+      if (!res.ok) return null;
       const data = await res.json();
+      if (!data || !data.title) return null;
 
-      let title = data.title || 'YouTube Track';
-      let artist = data.author_name || 'YouTube Artist';
+      const { songTitle, artistName } = musicService.cleanMetadata(data.title, data.author_name);
 
-      if (title.includes(' - ')) {
-        const parts = title.split(' - ');
-        artist = parts[0].trim();
-        title = parts.slice(1).join(' - ').replace(/\(Official.*?\)/gi, '').replace(/\[Official.*?\]/gi, '').trim();
-      } else if (title.includes(' — ')) {
-        const parts = title.split(' — ');
-        artist = parts[0].trim();
-        title = parts.slice(1).join(' — ').replace(/\(Official.*?\)/gi, '').replace(/\[Official.*?\]/gi, '').trim();
-      }
+      let durationSec = null;
+      // Instant precision duration lookup via free iTunes audio catalog
+      try {
+        const queryTerm = `${songTitle} ${artistName}`.trim();
+        const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&entity=song&limit=1`);
+        if (itunesRes.ok) {
+          const itunesData = await itunesRes.json();
+          if (itunesData.results && itunesData.results.length > 0 && itunesData.results[0].trackTimeMillis) {
+            durationSec = Math.round(itunesData.results[0].trackTimeMillis / 1000);
+          }
+        }
+      } catch {}
 
       return {
         id: `yt_${videoId}`,
-        songTitle: title,
-        artistName: artist,
+        songTitle,
+        artistName,
         songImageUrl: thumbnailUrl,
         externalSongUrl: cleanUrl,
-        duration: '03:45',
+        duration: durationSec, // Exact track duration in seconds
         platform: 'YOUTUBE',
       };
     } catch {
-      return {
-        id: `yt_${videoId}`,
-        songTitle: 'YouTube Video',
-        artistName: 'YouTube Artist',
-        songImageUrl: thumbnailUrl,
-        externalSongUrl: cleanUrl,
-        duration: '03:30',
-        platform: 'YOUTUBE',
-      };
+      return null;
     }
   },
+};
+
+// Formats seconds into m:ss or h:mm:ss for videos longer than 1 hour (e.g. 7054s -> 1:57:34)
+export const formatTime = (secs) => {
+  if (secs === null || secs === undefined || secs === '') return '0:00';
+  if (typeof secs === 'string' && secs.includes(':')) {
+    const parts = secs.split(':').map(Number);
+    // If it was previously formatted like "117:34" (>60 mins without hours), re-normalize it
+    if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] >= 60) {
+      const totalSecs = parts[0] * 60 + parts[1];
+      return formatTime(totalSecs);
+    }
+    return secs;
+  }
+  const total = Math.max(0, Math.floor(Number(secs) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const sPad = s < 10 ? `0${s}` : s;
+
+  if (h > 0) {
+    const mPad = m < 10 ? `0${m}` : m;
+    return `${h}:${mPad}:${sPad}`;
+  }
+  return `${m}:${sPad}`;
+};
+
+export const parseDurationToSeconds = (dur) => {
+  if (!dur && dur !== 0) return 210;
+  if (typeof dur === 'number') return dur;
+  const parts = dur.toString().split(':').map(Number);
+  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+    return parts[0] * 60 + parts[1];
+  }
+  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  }
+  const parsed = parseInt(dur, 10);
+  return isNaN(parsed) ? 210 : parsed;
 };
 

@@ -4,7 +4,7 @@ import * as Yup from 'yup';
 import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
-import { musicService } from '../services/musicService';
+import { musicService, formatTime, parseDurationToSeconds } from '../services/musicService';
 import { noteService } from '../services/noteService';
 import MusicCard from './MusicCard';
 import {
@@ -12,59 +12,11 @@ import {
   Layers, Volume2, Link as LinkIcon, Radio,
   Flame, Music, Check, RefreshCw, Sliders,
   Upload, Image as ImageIcon, Smile, FileUp, MoveHorizontal,
-  Headphones, Heart, Coffee, CloudRain, Ban, Globe, Moon
+  Headphones, Heart, Coffee, CloudRain, Ban, Globe, Moon,
+  Lightbulb, Info, ArrowLeftRight
 } from 'lucide-react';
 
-const PRESET_TRACKS = [
-  {
-    id: 'track-1',
-    songTitle: 'Night Drive',
-    artistName: 'Khruangbin',
-    duration: '04:12',
-    songImageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500',
-    externalSongUrl: 'https://www.youtube.com/watch?v=oc50wHexvY8',
-    defaultLyric: 'Headlights bounce against the wet cobblestone at 2:15 AM.',
-    icon: '🍃',
-  },
-  {
-    id: 'track-2',
-    songTitle: 'Holocene',
-    artistName: 'Bon Iver',
-    duration: '05:36',
-    songImageUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=500',
-    externalSongUrl: 'https://www.youtube.com/watch?v=TWcyIpul8OE',
-    defaultLyric: 'And at once I knew I was not magnificent.',
-    icon: '🏔️',
-  },
-  {
-    id: 'track-3',
-    songTitle: 'Alberto Balsalm',
-    artistName: 'Aphex Twin',
-    duration: '05:11',
-    songImageUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
-    externalSongUrl: 'https://www.youtube.com/watch?v=mUT3ZqV0u3Q',
-    defaultLyric: 'Tape hiss intertwining with bedroom ceiling shadows.',
-    icon: '📼',
-  },
-  {
-    id: 'track-4',
-    songTitle: 'Pink Moon',
-    artistName: 'Nick Drake',
-    duration: '02:06',
-    songImageUrl: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=500',
-    externalSongUrl: 'https://www.youtube.com/watch?v=aXnso9gkEc8',
-    defaultLyric: 'Pink moon is on its way, none stand so tall.',
-    icon: '🌙',
-  },
-];
 
-const TEMPLATES = [
-  { id: 'RECEIPTIFY', label: 'RECEIPTIFY', desc: 'Thermal paper roll + barcode' },
-  { id: 'CASSETTE', label: 'CASSETTE', desc: 'Y2K acrylic tape + washi' },
-  { id: 'STAMP', label: 'AIRMAIL STAMP', desc: 'Perforated postal artwork' },
-  { id: 'VINYL', label: 'VINYL DISC', desc: '33 RPM analog microgroove' },
-  { id: 'GALAXY', label: 'GALAXY ORBIT', desc: 'Cosmic planetary orbits' },
-];
 
 const EMOTIONS = [
   { id: 'Melancholic', label: '🌙 Melancholic' },
@@ -74,127 +26,7 @@ const EMOTIONS = [
   { id: 'Cosmic Bliss', label: '🪐 Cosmic Bliss' },
 ];
 
-// 1. Apple / iOS Emoji Catalog (Categorized)
-const IOS_EMOJI_CATEGORIES = [
-  {
-    id: 'music',
-    label: '🎧 Audio & Lo-Fi',
-    emojis: ['🎧', '📻', '🎙️', '📼', '💿', '🎹', '🎸', '🎼', '🎶', '🥁', '🪗', '🎺', '🎻', '🔊', '🔈', '🪩', '🎵']
-  },
-  {
-    id: 'dev',
-    label: '💻 Dev & IT Artifacts',
-    emojis: ['💻', '⌨️', '💾', '🕹️', '👾', '⚡', '🔋', '📡', '📟', '🔌', '🖥️', '🚀', '🤖', '🛠️', '☕', '💡', '🔍', '⚙️']
-  },
-  {
-    id: 'aesthetic',
-    label: '🥀 Aesthetic & Mood',
-    emojis: ['🥀', '✨', '🌙', '🪐', '🌧️', '🕯️', '🦋', '🫧', '🧸', '🕊️', '💌', '🍵', '🍷', '📖', '🎞️', '📷', '🗝️', '🖤']
-  },
-  {
-    id: 'emotions',
-    label: '🤍 Hearts & Feelings',
-    emojis: ['🤍', '🖤', '❤️‍🔥', '💔', '🥹', '🫠', '🫣', '😌', '😴', '🌊', '🍃', '🌸', '☁️', '💫', '🔥', '🧿', '🍀']
-  }
-];
-
-// 2. Curated Aesthetic Motion GIFs & Stickers (Lightweight, low-memory)
-const CURATED_AESTHETIC_GIFS = [
-  {
-    id: 'gif-vinyl',
-    title: '33 RPM Vinyl Spin',
-    tag: '#vinyl',
-    url: 'https://images.unsplash.com/photo-1539375665275-f9de415ef9ac?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-tape',
-    title: '90s Chrome Tape',
-    tag: '#cassette',
-    url: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-rain',
-    title: 'Rain on Window',
-    tag: '#rain',
-    url: 'https://images.unsplash.com/photo-1519692933481-e162a57d6721?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-cat',
-    title: 'Lo-Fi Chill Cat',
-    tag: '#cat',
-    url: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-coffee',
-    title: 'Warm Matcha Coffee',
-    tag: '#coffee',
-    url: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-city',
-    title: 'Midnight Highway',
-    tag: '#drive',
-    url: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-code',
-    title: 'Terminal / Matrix',
-    tag: '#code',
-    url: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-nebula',
-    title: 'Interstellar Nebula',
-    tag: '#cosmic',
-    url: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-heart',
-    title: 'Neon Cyber Heart',
-    tag: '#heart',
-    url: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-headphones',
-    title: 'Studio Monitor Phones',
-    tag: '#music',
-    url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-lofi',
-    title: 'Lo-Fi Midnight Lamp',
-    tag: '#lofi',
-    url: 'https://images.unsplash.com/photo-1507499739999-097706ad8914?w=200&auto=format&fit=crop'
-  },
-  {
-    id: 'gif-sparkle',
-    title: 'Starlight Shimmer',
-    tag: '#sparkle',
-    url: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=200&auto=format&fit=crop'
-  }
-];
-
-// 3. Tactile Wax Seals & Pins
-const WAX_SEALS_AND_PINS = [
-  { id: 'None', label: 'None', icon: '—', desc: 'Clean minimalism' },
-  { id: 'Crimson Wax', label: 'Crimson Wax', icon: '🔴', desc: 'Royal letter seal' },
-  { id: 'Vinyl 33 RPM', label: 'Vinyl 33 RPM', icon: '💿', desc: 'Microgroove pin' },
-  { id: 'Hologram Star', label: 'Hologram Star', icon: '⭐', desc: 'Prismatic foil' },
-  { id: 'Washi Tape', label: 'Washi Tape', icon: '🩹', desc: 'Pastel paper tape' },
-  { id: 'Dark Rose', label: 'Dark Rose', icon: '🥀', desc: 'Pressed flower' },
-  { id: 'Hi-Fi Headphones', label: 'Hi-Fi Phones', icon: '🎧', desc: 'Studio monitor' },
-  { id: 'Flame Seal', label: 'Flame Seal', icon: '🔥', desc: 'Golden fire' },
-];
-
-// 4. Smart Highlighted Milestones (Lấy các mốc gợi ý sẵn có từ bài hát)
-const SMART_HIGHLIGHT_MILESTONES = [
-  { label: '🌟 Chorus Hook', timeSec: 45, desc: 'Điệp khúc cao trào' },
-  { label: '🌙 Verse Hook', timeSec: 15, desc: 'Lời tự sự êm dịu' },
-  { label: '⚡ Climax Solo', timeSec: 75, desc: 'Đoạn solo biến chuyển' },
-  { label: '☕ Intro Melody', timeSec: 0, desc: 'Giai điệu dạo đầu' },
-];
-
-// 5. Trending Gen-Z & Indie Audiophile Vibe Captions
+// Curated Gen-Z & Indie Audiophile Vibe Captions
 const TRENDY_VIBES = [
   { tag: '🎧 2:15 AM Drive', text: 'pov: driving home at 2:15 AM with this on loop' },
   { tag: '🖤 Rent-Free', text: 'no thoughts, just this bassline living rent-free in my head forever' },
@@ -210,36 +42,24 @@ const TRENDY_VIBES = [
   { tag: '🫧 Overthinking', text: 'staring at the ceiling letting this acoustic guitar heal me' },
 ];
 
-// Helper to convert mm:ss or seconds to integer seconds
-const parseDurationToSeconds = (dur) => {
-  if (!dur) return 252;
-  if (typeof dur === 'number') return dur;
-  const parts = dur.toString().split(':').map(Number);
-  if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-    return parts[0] * 60 + parts[1];
-  }
-  if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  const parsed = parseInt(dur, 10);
-  return isNaN(parsed) ? 252 : parsed;
-};
-
-// Formik Validation (Allowing flexible track durations up to 30 mins)
+// Formik Validation (Allowing flexible track durations up to 24 hours)
 const NoteValidationSchema = Yup.object().shape({
   songTitle: Yup.string().required('Song title is required. Pick or search a track.'),
   artistName: Yup.string().required('Artist name is required.'),
   songImageUrl: Yup.string().required('Album artwork is required.'),
-  audioSnippetStart: Yup.number().min(0).max(1800).required(),
+  audioSnippetStart: Yup.number().min(0).max(86400).required(),
   templateType: Yup.string().required(),
   emotionTag: Yup.string().required(),
 });
 
-// Slender Spotify-code acoustic waveform with dots (•), natural vocal peaks, and dynamic non-repetitive rhythm
-const REFINED_ACOUSTIC_BARS = [
-  4, 10, 16, 4, 20, 30, 14, 22, 34, 24, 16, 22, 32, 22, 14, 8, 4, 8, 16, 24,
-  36, 26, 16, 10, 4, 14, 22, 32, 38, 28, 18, 12, 4, 12, 20, 30, 24, 16, 8, 4,
-  16, 26, 34, 24, 16, 10, 4, 10, 20, 28, 36, 26, 16, 8, 4, 12, 22, 16, 8, 4
+// Slender Instagram/Spotify-style acoustic waveform matching user screenshot with rounded capsule bars
+const INSTAGRAM_ACOUSTIC_BARS = [
+  10, 14, 20, 28, 38, 26, 16, 22, 32, 42,
+  34, 24, 16, 20, 28, 38, 46, 36, 26, 18,
+  14, 22, 32, 44, 38, 28, 20, 26, 36, 48,
+  40, 30, 20, 16, 24, 36, 44, 32, 22, 16,
+  12, 18, 26, 36, 40, 30, 20, 14, 10, 8,
+  12, 18
 ];
 
 export default function StudioModal({ onNoteCreated }) {
@@ -257,12 +77,79 @@ export default function StudioModal({ onNoteCreated }) {
 
   // Real YouTube Audio Preview Engine State
   const [isPreviewAudioPlaying, setIsPreviewAudioPlaying] = useState(false);
-  const [playbackKey, setPlaybackKey] = useState(0);
-  const previewTimerRef = useRef(null);
-  const searchDebounceRef = useRef(null);
+
+  // Dynamic Audio Duration (Calculated dynamically from loaded track, default 210s)
+  const [trackDurationSec, setTrackDurationSec] = useState(210);
 
   // Shared Community Hot Tracks Pool (0 token usage across 1000 users)
   const [sharedHotPool, setSharedHotPool] = useState([]);
+
+  // Note Personalization: Clean drawer toggle (+GIF expands options)
+  const [showGifDrawer, setShowGifDrawer] = useState(false);
+  const [customStickerUrl, setCustomStickerUrl] = useState('');
+  const [nativeEmojiInput, setNativeEmojiInput] = useState('');
+
+  // Refs
+  const loopWorkerRef = useRef(null);
+  const playerIframeRef = useRef(null);
+  const previewTimerRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+  const waveformRef = useRef(null);
+  const highlightedWaveformRef = useRef(null);
+  const selectionFrameRef = useRef(null);
+  const timeDisplayRef = useRef(null);
+  const topTimeDisplayRef = useRef(null);
+  const isDraggingRange = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartSec = useRef(0);
+  const fileInputRef = useRef(null);
+
+  const formik = useFormik({
+    initialValues: {
+      songTitle: '',
+      artistName: '',
+      songImageUrl: '',
+      externalSongUrl: '',
+      audioSnippetStart: 0,
+      templateType: 'CASSETTE',
+      emotionTag: EMOTIONS[0].label,
+      lyricSnippet: '',
+      caption: '',
+      sealBadge: 'Orbit',
+      visibility: 'PUBLIC',
+    },
+    validationSchema: NoteValidationSchema,
+    onSubmit: async (values, { setSubmitting, resetForm }) => {
+      try {
+        const payload = {
+          userId: user?.id || '00000000-0000-0000-0000-000000000001',
+          songTitle: values.songTitle,
+          artistName: values.artistName,
+          songImageUrl: values.songImageUrl,
+          externalSongUrl: values.externalSongUrl,
+          audioSnippetStart: values.audioSnippetStart,
+          templateType: values.templateType,
+          emotionTag: values.emotionTag,
+          lyricSnippet: values.lyricSnippet.trim(),
+          caption: values.caption.trim(),
+          stickerBadge: values.sealBadge,
+          visibility: values.visibility,
+        };
+
+        const createdNote = await noteService.createNote(payload);
+        toast.success(`Published "${values.songTitle}" note successfully.`);
+        resetForm();
+        setSearchResults([]);
+        setQuery('');
+        if (onNoteCreated) onNoteCreated(createdNote);
+        setStudioOpen(false);
+      } catch (err) {
+        toast.error(err.message || 'Failed to publish note');
+      } finally {
+        setSubmitting(false);
+      }
+    },
+  });
 
   // Fetch shared pool on mount or when studio opens
   useEffect(() => {
@@ -287,6 +174,65 @@ export default function StudioModal({ onNoteCreated }) {
     }
   }, [isStudioOpen]);
 
+  // Dynamic Real-time Duration Sync from YouTube IFrame Player API & window.YT
+  useEffect(() => {
+    let pingInterval = null;
+    let attempts = 0;
+
+    const pingIframeForDuration = () => {
+      if (playerIframeRef.current?.contentWindow) {
+        playerIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'listening', id: 1 }),
+          '*'
+        );
+        playerIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'getDuration', args: [] }),
+          '*'
+        );
+      }
+      attempts++;
+      if (attempts > 15) {
+        clearInterval(pingInterval);
+      }
+    };
+
+    pingInterval = setInterval(pingIframeForDuration, 600);
+
+    const handlePlayerMessage = (e) => {
+      try {
+        const payload = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+        if (!payload) return;
+
+        let dur = null;
+        if (typeof payload.info?.duration === 'number') {
+          dur = payload.info.duration;
+        } else if (typeof payload.info?.videoData?.duration === 'number') {
+          dur = payload.info.videoData.duration;
+        } else if (typeof payload.duration === 'number') {
+          dur = payload.duration;
+        } else if (typeof payload.data === 'number') {
+          dur = payload.data;
+        } else if (payload.event === 'onReady') {
+          pingIframeForDuration();
+        }
+
+        if (dur && typeof dur === 'number' && dur > 0) {
+          const exactSec = Math.round(dur);
+          if (exactSec > 0 && exactSec !== trackDurationSec) {
+            setTrackDurationSec(exactSec);
+            clearInterval(pingInterval);
+          }
+        }
+      } catch {}
+    };
+
+    window.addEventListener('message', handlePlayerMessage);
+    return () => {
+      clearInterval(pingInterval);
+      window.removeEventListener('message', handlePlayerMessage);
+    };
+  }, [trackDurationSec, formik.values.externalSongUrl]);
+
   // Instant Zero-Token YouTube Link Detection Handler
   const handleUrlInputChange = async (val) => {
     setUrlInput(val);
@@ -303,9 +249,13 @@ export default function StudioModal({ onNoteCreated }) {
           formik.setFieldValue('songImageUrl', resolved.songImageUrl);
           formik.setFieldValue('externalSongUrl', resolved.externalSongUrl);
           setResolvedTrackInfo(resolved);
-          const durSec = parseDurationToSeconds(resolved.duration);
-          setTrackDurationSec(durSec);
+          if (resolved.duration) {
+            const durSec = parseDurationToSeconds(resolved.duration);
+            setTrackDurationSec(durSec);
+          }
           toast.success(`✨ Detected: ${resolved.songTitle} - ${resolved.artistName}`);
+        } else {
+          toast.warn('Could not auto-fetch metadata. You can enter title & paste link.');
         }
       } catch (err) {
         console.warn('URL auto-resolve failed:', err);
@@ -338,90 +288,100 @@ export default function StudioModal({ onNoteCreated }) {
     setResolvedTrackInfo(track);
     const durSec = parseDurationToSeconds(track.duration || (track.durationMs ? track.durationMs / 1000 : 210));
     setTrackDurationSec(durSec);
-    toast.success(`Picked: ${track.songTitle} (0 Quota)`);
+    toast.success(`Picked: ${track.songTitle}`);
   };
 
-  // Dynamic Audio Duration (Calculated from actual track duration, not hardcoded!)
-  const [trackDurationSec, setTrackDurationSec] = useState(() => parseDurationToSeconds(PRESET_TRACKS[0].duration));
+  // Seek and play without re-mounting iframe (keeps background media session active in Chrome without triggering autoplay blocks)
+  const seekAndPlay = (targetSec) => {
+    if (playerIframeRef.current && playerIframeRef.current.contentWindow) {
+      playerIframeRef.current.contentWindow.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func: 'seekTo',
+          args: [targetSec, true],
+        }),
+        '*'
+      );
+      playerIframeRef.current.contentWindow.postMessage(
+        JSON.stringify({
+          event: 'command',
+          func: 'playVideo',
+          args: [],
+        }),
+        '*'
+      );
+    }
+  };
 
-  // Note Personalization: Clean drawer toggle (+GIF expands options) & drawer view tabs
-  const [showGifDrawer, setShowGifDrawer] = useState(false);
-  const [drawerTab, setDrawerTab] = useState('default'); // 'default' | 'search'
-  const [selectedEmojiCategory, setSelectedEmojiCategory] = useState('all');
-  const [emojiSearchQuery, setEmojiSearchQuery] = useState('');
-  const [gifSearchQuery, setGifSearchQuery] = useState('');
-  const [nativeEmojiInput, setNativeEmojiInput] = useState('');
-
-  // SVG Audio Waveform Draggable Bounding Box Refs
-  const waveformRef = useRef(null);
-  const isDraggingRange = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartSec = useRef(0);
-  const fileInputRef = useRef(null);
-
-  const formik = useFormik({
-    initialValues: {
-      songTitle: PRESET_TRACKS[0].songTitle,
-      artistName: PRESET_TRACKS[0].artistName,
-      songImageUrl: PRESET_TRACKS[0].songImageUrl,
-      externalSongUrl: PRESET_TRACKS[0].externalSongUrl,
-      audioSnippetStart: 15,
-      templateType: 'CASSETTE',
-      emotionTag: EMOTIONS[0].label,
-      lyricSnippet: PRESET_TRACKS[0].defaultLyric,
-      caption: 'pov: driving home at 2:15 AM with this on loop',
-      sealBadge: 'Orbit',
-      visibility: 'PUBLIC',
-    },
-    validationSchema: NoteValidationSchema,
-    onSubmit: async (values, { setSubmitting, resetForm }) => {
-      try {
-        const payload = {
-          userId: user?.id || '00000000-0000-0000-0000-000000000001',
-          songTitle: values.songTitle,
-          artistName: values.artistName,
-          songImageUrl: values.songImageUrl,
-          externalSongUrl: values.externalSongUrl,
-          audioSnippetStart: values.audioSnippetStart,
-          templateType: values.templateType,
-          emotionTag: values.emotionTag,
-          lyricSnippet: values.lyricSnippet.trim(),
-          caption: values.caption.trim(),
-          stickerBadge: values.sealBadge,
-          visibility: values.visibility,
-        };
-
-        const createdNote = await noteService.createNote(payload);
-        toast.success(`Published "${values.songTitle}" note! 🎵`);
-        resetForm();
-        setSearchResults([]);
-        setQuery('');
-        if (onNoteCreated) onNoteCreated(createdNote);
-        setStudioOpen(false);
-      } catch (err) {
-        toast.error(err.message || 'Failed to publish note');
-      } finally {
-        setSubmitting(false);
-      }
-    },
-  });
-
-  // Loop snippet playback continuously strictly within [start, start + duration]
+  // Continuous loop snippet playback backed by Web Worker timer
+  // Crucial fix: Standard iframe re-mounting in background tabs is BLOCKED by Chrome autoplay policy!
+  // By sending postMessage 'seekTo' to the existing mounted iframe without unmounting,
+  // audio loops continuously in the background even when Chrome is unfocused or user is working in Antigravity.
   useEffect(() => {
-    if (!isPreviewAudioPlaying) return;
+    if (!isPreviewAudioPlaying) {
+      if (loopWorkerRef.current) {
+        loopWorkerRef.current.postMessage({ type: 'STOP' });
+        loopWorkerRef.current.terminate();
+        loopWorkerRef.current = null;
+      }
+      return;
+    }
 
-    const loopTimer = setTimeout(() => {
-      setPlaybackKey((prev) => prev + 1);
-    }, snippetDuration * 1000);
+    const workerScript = `
+      let intervalId = null;
+      let elapsed = 0;
+      let duration = 30;
 
-    return () => clearTimeout(loopTimer);
-  }, [isPreviewAudioPlaying, playbackKey, snippetDuration, formik.values.audioSnippetStart]);
+      self.onmessage = function(e) {
+        const msg = e.data;
+        if (!msg) return;
+        if (msg.type === 'START') {
+          duration = msg.duration || 30;
+          elapsed = 0;
+          if (intervalId) clearInterval(intervalId);
+          intervalId = setInterval(() => {
+            elapsed += 1;
+            if (elapsed >= duration) {
+              elapsed = 0;
+              self.postMessage({ type: 'LOOP_TICK' });
+            }
+          }, 1000);
+        } else if (msg.type === 'RESET') {
+          elapsed = 0;
+        } else if (msg.type === 'STOP') {
+          if (intervalId) clearInterval(intervalId);
+          intervalId = null;
+          elapsed = 0;
+        }
+      };
+    `;
+    const blob = new Blob([workerScript], { type: 'application/javascript' });
+    const workerUrl = URL.createObjectURL(blob);
+    const worker = new Worker(workerUrl);
+    loopWorkerRef.current = worker;
+
+    worker.onmessage = (e) => {
+      if (e.data && e.data.type === 'LOOP_TICK') {
+        seekAndPlay(formik.values.audioSnippetStart);
+      }
+    };
+
+    worker.postMessage({ type: 'START', duration: snippetDuration });
+
+    return () => {
+      worker.postMessage({ type: 'STOP' });
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+      loopWorkerRef.current = null;
+    };
+  }, [isPreviewAudioPlaying, snippetDuration, formik.values.audioSnippetStart]);
 
   // Helper to update snippet start and seek audio if playing (continuous playback without auto-cut)
   const updateSnippetStart = (newSec) => {
     formik.setFieldValue('audioSnippetStart', newSec);
     if (isPreviewAudioPlaying) {
-      setPlaybackKey(prev => prev + 1);
+      seekAndPlay(newSec);
+      loopWorkerRef.current?.postMessage({ type: 'RESET' });
     }
   };
 
@@ -485,16 +445,52 @@ export default function StudioModal({ onNoteCreated }) {
     setSearchResults([]);
   };
 
+  // Local high-speed snippet state for instant 60fps/120fps Instagram-like dragging without lag
+  const [scrubSnippetStart, setScrubSnippetStart] = useState(() => formik.values.audioSnippetStart || 0);
+
+  // Synchronize when formik value updates externally (track selection, milestone clicks, duration toggle)
+  useEffect(() => {
+    if (!isDraggingRange.current) {
+      setScrubSnippetStart(formik.values.audioSnippetStart);
+      const leftP = (formik.values.audioSnippetStart / trackDurationSec) * 100;
+      const rightP = (Math.min(trackDurationSec, formik.values.audioSnippetStart + snippetDuration) / trackDurationSec) * 100;
+      if (selectionFrameRef.current) {
+        selectionFrameRef.current.style.left = `${leftP}%`;
+        selectionFrameRef.current.style.width = `${(snippetDuration / trackDurationSec) * 100}%`;
+      }
+      if (highlightedWaveformRef.current) {
+        highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
+      }
+    }
+  }, [formik.values.audioSnippetStart, snippetDuration, trackDurationSec]);
+
+  const activeSnippetStart = isDraggingRange.current ? scrubSnippetStart : formik.values.audioSnippetStart;
+  const activeSnippetEnd = Math.min(trackDurationSec, activeSnippetStart + snippetDuration);
+
   // Dynamic milestones (Chorus ~35%, Verse ~12% of actual track duration)
   const dynamicChorusTime = Math.floor(trackDurationSec * 0.35);
   const dynamicVerseTime = Math.floor(trackDurationSec * 0.12);
 
   const handleJumpToChorus = () => {
-    updateSnippetStart(Math.min(dynamicChorusTime, Math.max(0, trackDurationSec - snippetDuration)));
+    const targetSec = Math.min(dynamicChorusTime, Math.max(0, trackDurationSec - snippetDuration));
+    setScrubSnippetStart(targetSec);
+    formik.setFieldValue('audioSnippetStart', targetSec);
+    const leftP = (targetSec / trackDurationSec) * 100;
+    const rightP = (Math.min(trackDurationSec, targetSec + snippetDuration) / trackDurationSec) * 100;
+    if (selectionFrameRef.current) selectionFrameRef.current.style.left = `${leftP}%`;
+    if (highlightedWaveformRef.current) highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
+    if (isPreviewAudioPlaying) seekAndPlay(targetSec);
   };
 
   const handleJumpToVerse = () => {
-    updateSnippetStart(Math.min(dynamicVerseTime, Math.max(0, trackDurationSec - snippetDuration)));
+    const targetSec = Math.min(dynamicVerseTime, Math.max(0, trackDurationSec - snippetDuration));
+    setScrubSnippetStart(targetSec);
+    formik.setFieldValue('audioSnippetStart', targetSec);
+    const leftP = (targetSec / trackDurationSec) * 100;
+    const rightP = (Math.min(trackDurationSec, targetSec + snippetDuration) / trackDurationSec) * 100;
+    if (selectionFrameRef.current) selectionFrameRef.current.style.left = `${leftP}%`;
+    if (highlightedWaveformRef.current) highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
+    if (isPreviewAudioPlaying) seekAndPlay(targetSec);
   };
 
   // AI Smart Vibe Generator
@@ -503,42 +499,123 @@ export default function StudioModal({ onNoteCreated }) {
     formik.setFieldValue('caption', randomVibe);
   };
 
-  // Audio Waveform Click-to-Jump Handler (scaled to actual track duration)
+  // Instant Audio Waveform Click-to-Jump Handler
   const handleWaveformClick = (e) => {
     if (!waveformRef.current) return;
     const rect = waveformRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const ratio = Math.max(0, Math.min(1, clickX / rect.width));
-    const targetSec = Math.max(0, Math.min(trackDurationSec - snippetDuration, Math.round(ratio * trackDurationSec)));
-    updateSnippetStart(targetSec);
+    const centerSec = Math.round(ratio * trackDurationSec);
+    const targetSec = Math.max(0, Math.min(trackDurationSec - snippetDuration, Math.round(centerSec - snippetDuration / 2)));
+    setScrubSnippetStart(targetSec);
+    formik.setFieldValue('audioSnippetStart', targetSec);
+    const leftP = (targetSec / trackDurationSec) * 100;
+    const rightP = (Math.min(trackDurationSec, targetSec + snippetDuration) / trackDurationSec) * 100;
+    if (selectionFrameRef.current) selectionFrameRef.current.style.left = `${leftP}%`;
+    if (highlightedWaveformRef.current) highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
+    const startFormatted = formatTime(targetSec);
+    const endFormatted = formatTime(Math.min(trackDurationSec, targetSec + snippetDuration));
+    if (timeDisplayRef.current) timeDisplayRef.current.innerText = `${startFormatted} – ${endFormatted}`;
+    if (topTimeDisplayRef.current) topTimeDisplayRef.current.innerText = `(${startFormatted} – ${endFormatted} / ${formatTime(trackDurationSec)})`;
+    if (isPreviewAudioPlaying) seekAndPlay(targetSec);
   };
 
-  // Audio Waveform Draggable Bounding Box Handler (Zero-lag synchronized tracking)
-  const handleDragBoxMouseDown = (e) => {
-    e.stopPropagation();
+  // Pure 120 FPS Zero-Lag Direct DOM Scrubber Dragging with Hardware-Accelerated ClipPath
+  const handleDragStart = (clientX) => {
+    if (!waveformRef.current) return;
     isDraggingRange.current = true;
-    dragStartX.current = e.clientX;
-    dragStartSec.current = formik.values.audioSnippetStart;
     document.body.style.userSelect = 'none';
 
-    const handleMouseMove = (moveEvent) => {
+    const rect = waveformRef.current.getBoundingClientRect();
+    const clickRatio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const clickSec = Math.round(clickRatio * trackDurationSec);
+    const currStart = scrubSnippetStart;
+    const currEnd = currStart + snippetDuration;
+
+    let initialStartSec = currStart;
+    // If clicked outside current selection window, snap directly to center around click immediately
+    if (clickSec < currStart || clickSec > currEnd) {
+      initialStartSec = Math.max(0, Math.min(trackDurationSec - snippetDuration, Math.round(clickSec - snippetDuration / 2)));
+      const leftP = (initialStartSec / trackDurationSec) * 100;
+      const rightP = (Math.min(trackDurationSec, initialStartSec + snippetDuration) / trackDurationSec) * 100;
+      if (selectionFrameRef.current) selectionFrameRef.current.style.left = `${leftP}%`;
+      if (highlightedWaveformRef.current) highlightedWaveformRef.current.style.clipPath = `polygon(${leftP}% 0%, ${rightP}% 0%, ${rightP}% 100%, ${leftP}% 100%)`;
+      const sFormatted = formatTime(initialStartSec);
+      const eFormatted = formatTime(Math.min(trackDurationSec, initialStartSec + snippetDuration));
+      if (timeDisplayRef.current) timeDisplayRef.current.innerText = `${sFormatted} – ${eFormatted}`;
+      if (topTimeDisplayRef.current) topTimeDisplayRef.current.innerText = `(${sFormatted} – ${eFormatted} / ${formatTime(trackDurationSec)})`;
+    }
+
+    dragStartX.current = clientX;
+    dragStartSec.current = initialStartSec;
+    let lastSec = initialStartSec;
+
+    const onMove = (currX) => {
       if (!isDraggingRange.current || !waveformRef.current) return;
-      const rect = waveformRef.current.getBoundingClientRect();
-      const deltaX = moveEvent.clientX - dragStartX.current;
+      const deltaX = currX - dragStartX.current;
       const deltaSec = (deltaX / rect.width) * trackDurationSec;
       const newSec = Math.max(0, Math.min(trackDurationSec - snippetDuration, Math.round(dragStartSec.current + deltaSec)));
-      updateSnippetStart(newSec);
+
+      lastSec = newSec;
+
+      const leftPercent = (newSec / trackDurationSec) * 100;
+      const rightPercent = (Math.min(trackDurationSec, newSec + snippetDuration) / trackDurationSec) * 100;
+
+      // 100% In-Sync Direct Hardware ClipPath & Left Position (0ms lag!)
+      if (selectionFrameRef.current) {
+        selectionFrameRef.current.style.left = `${leftPercent}%`;
+      }
+      if (highlightedWaveformRef.current) {
+        highlightedWaveformRef.current.style.clipPath = `polygon(${leftPercent}% 0%, ${rightPercent}% 0%, ${rightPercent}% 100%, ${leftPercent}% 100%)`;
+      }
+      const startFormatted = formatTime(newSec);
+      const endFormatted = formatTime(Math.min(trackDurationSec, newSec + snippetDuration));
+      if (timeDisplayRef.current) {
+        timeDisplayRef.current.innerText = `${startFormatted} – ${endFormatted}`;
+      }
+      if (topTimeDisplayRef.current) {
+        topTimeDisplayRef.current.innerText = `(${startFormatted} – ${endFormatted} / ${formatTime(trackDurationSec)})`;
+      }
     };
 
-    const handleMouseUp = () => {
+    const onMouseMove = (e) => onMove(e.clientX);
+    const onTouchMove = (e) => {
+      if (e.touches && e.touches[0]) onMove(e.touches[0].clientX);
+    };
+
+    const onDragEnd = () => {
       isDraggingRange.current = false;
       document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onDragEnd);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onDragEnd);
+
+      // Commit state once user releases slider
+      setScrubSnippetStart(lastSec);
+      formik.setFieldValue('audioSnippetStart', lastSec);
+      if (isPreviewAudioPlaying) {
+        seekAndPlay(lastSec);
+      }
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onDragEnd);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onDragEnd);
+  };
+
+  const handleDragBoxMouseDown = (e) => {
+    e.stopPropagation();
+    handleDragStart(e.clientX);
+  };
+
+  const handleDragBoxTouchStart = (e) => {
+    e.stopPropagation();
+    if (e.touches && e.touches[0]) {
+      handleDragStart(e.touches[0].clientX);
+    }
   };
 
   // Local File Upload Handler with instant client-side canvas compression (~15KB)
@@ -559,7 +636,7 @@ export default function StudioModal({ onNoteCreated }) {
       // If animated GIF, keep original dataUrl so animation frames are preserved
       if (file.type === 'image/gif') {
         formik.setFieldValue('sealBadge', rawDataUrl);
-        toast.success(`Attached "${file.name}" to note! ✨`);
+        toast.success(`Attached "${file.name}" to note.`);
         return;
       }
 
@@ -587,60 +664,33 @@ export default function StudioModal({ onNoteCreated }) {
         ctx.drawImage(img, 0, 0, w, h);
         const compressedDataUrl = canvas.toDataURL('image/webp', 0.88);
         formik.setFieldValue('sealBadge', compressedDataUrl);
-        toast.success(`Attached "${file.name}" to note! ✨`);
+        toast.success(`Attached "${file.name}" to note.`);
       };
       img.src = rawDataUrl;
     };
     reader.readAsDataURL(file);
   };
 
-  // Filtered Emojis Catalog
-  const filteredEmojis = React.useMemo(() => {
-    let pool = [];
-    if (selectedEmojiCategory === 'all') {
-      IOS_EMOJI_CATEGORIES.forEach(cat => pool.push(...cat.emojis));
-    } else {
-      const found = IOS_EMOJI_CATEGORIES.find(c => c.id === selectedEmojiCategory);
-      if (found) pool = found.emojis;
-    }
-    if (!emojiSearchQuery.trim()) return pool;
-    const q = emojiSearchQuery.toLowerCase();
-    // Match emoji string
-    return pool.filter(em => em.includes(q) || pool.includes(em));
-  }, [selectedEmojiCategory, emojiSearchQuery]);
-
-  // Filtered Curated GIFs
-  const filteredGifs = React.useMemo(() => {
-    if (!gifSearchQuery.trim()) return CURATED_AESTHETIC_GIFS;
-    const q = gifSearchQuery.toLowerCase();
-    return CURATED_AESTHETIC_GIFS.filter(g => g.title.toLowerCase().includes(q) || g.tag.toLowerCase().includes(q));
-  }, [gifSearchQuery]);
-
   // Construct Live Preview Note Object
   const endSeconds = formik.values.audioSnippetStart + snippetDuration;
-  const formatTime = (secs) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
 
   const previewNote = {
     id: 'studio-preview-id',
-    userDisplayName: user?.displayName || 'Linh Tran',
-    handle: user?.handle || '@linhtran',
+    userDisplayName: user?.displayName || user?.name || (user?.email ? user.email.split('@')[0] : 'You'),
+    handle: user?.handle || (user?.email ? `@${user.email.split('@')[0]}` : '@you'),
     timeAgo: 'Just now',
-    songTitle: formik.values.songTitle || 'NIGHT DRIVE / MIDNIGHT AMBIENT',
-    artistName: formik.values.artistName || 'Khruangbin Vibe',
-    songImageUrl: formik.values.songImageUrl || PRESET_TRACKS[0].songImageUrl,
-    audioSnippetStart: formatTime(formik.values.audioSnippetStart),
-    audioSnippetEnd: formatTime(endSeconds),
+    songTitle: formik.values.songTitle || 'SELECT OR PASTE A TRACK',
+    artistName: formik.values.artistName || 'Awaiting Music Link',
+    songImageUrl: formik.values.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500',
+    audioSnippetStart: formatTime(activeSnippetStart),
+    audioSnippetEnd: formatTime(activeSnippetEnd),
     templateType: formik.values.templateType,
     emotionTag: formik.values.emotionTag,
-    lyricSnippet: formik.values.lyricSnippet,
+    lyricSnippet: formik.values.lyricSnippet || (formik.values.songTitle ? '' : 'Paste any video or music link to preview...'),
     caption: formik.values.caption,
     stickerBadge: formik.values.sealBadge,
     visibility: formik.values.visibility,
-    likesCount: 42,
+    likesCount: 0,
     orderNumber: user
       ? `ORD #${user.memberId ? user.memberId.replace('#', '') : (user.id ? user.id.replace(/-/g, '').slice(-4).toUpperCase() : '0101')} FOR ${(user.displayName || user.email?.split('@')[0] || 'ARCHIVER').toUpperCase()}`
       : 'ORD #0101 FOR GUEST ARCHIVER',
@@ -652,13 +702,21 @@ export default function StudioModal({ onNoteCreated }) {
   const handleTogglePreviewAudio = () => {
     if (isPreviewAudioPlaying) {
       setIsPreviewAudioPlaying(false);
+      if (playerIframeRef.current?.contentWindow) {
+        playerIframeRef.current.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'pauseVideo', args: [] }),
+          '*'
+        );
+      }
     } else {
       if (!ytVideoId && !formik.values.externalSongUrl) {
         toast.info('Please paste a link or select a track to preview snippet!');
         return;
       }
       setIsPreviewAudioPlaying(true);
-      setPlaybackKey(prev => prev + 1);
+      setTimeout(() => {
+        seekAndPlay(formik.values.audioSnippetStart);
+      }, 50);
     }
   };
 
@@ -716,7 +774,7 @@ export default function StudioModal({ onNoteCreated }) {
           {/* ------------------------------------------------------ */}
           {/* LEFT COLUMN: FORM CONTROLS (Scrollable)                */}
           {/* ------------------------------------------------------ */}
-          <div className="w-full lg:w-[58%] overflow-y-auto p-5 space-y-4 pr-3 scrollbar-thin" style={{ willChange: 'transform', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch' }}>
+          <div className="w-full lg:w-[58%] overflow-y-auto p-5 space-y-4 pr-3 custom-scrollbar" style={{ willChange: 'transform', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch' }}>
 
             {/* TEMPLATE PICKER: Rich Tactile Mini-Preview Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-1.5 bg-[#06111a] rounded-2xl border border-[#142c40]">
@@ -883,45 +941,46 @@ export default function StudioModal({ onNoteCreated }) {
                     </div>
                   </div>
 
-                  {/* Auto-Resolved YouTube Track Confirmation Card with Clear Button */}
+                  {/* Auto-Resolved YouTube Track Confirmation Card: Prioritizing Song Title + Tools to Swap/Clean */}
                   {resolvedTrackInfo && (
-                    <div className="p-2.5 rounded-xl bg-[#081724] border border-cyan-500/40 flex items-center justify-between animate-in fade-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-3.5 rounded-xl bg-[#081724] border border-cyan-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 duration-200 shadow-sm">
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1 w-full">
                         <img
-                          src={resolvedTrackInfo.songImageUrl}
+                          src={formik.values.songImageUrl || resolvedTrackInfo.songImageUrl}
                           alt="Cover"
-                          className="w-9 h-9 rounded-lg object-cover border border-cyan-400/40 shadow-xs shrink-0"
+                          className="w-13 h-13 rounded-xl object-cover border border-cyan-400/40 shadow-sm shrink-0"
                         />
-                        <div className="truncate">
-                          <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-500/40 text-[8.5px] font-mono font-bold">
-                              Track
-                            </span>
-                            <p className="text-xs font-bold text-white truncate">
-                              {resolvedTrackInfo.songTitle}
-                            </p>
-                          </div>
-                          <p className="text-[10px] text-[#91B9C5] truncate">
-                            {resolvedTrackInfo.artistName}
+                        <div className="min-w-0 flex-1">
+                          <h4 
+                            className="text-sm font-bold text-white font-sans truncate tracking-tight"
+                            title={formik.values.artistName ? `${formik.values.songTitle} – ${formik.values.artistName}` : formik.values.songTitle}
+                          >
+                            <span>{formik.values.songTitle || 'Selected Audio Track'}</span>
+                            {formik.values.artistName && (
+                              <span className="text-[#91B9C5] font-normal font-grotesk ml-2 opacity-85">
+                                – {formik.values.artistName}
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[10px] font-mono text-[#91B9C5]/60 truncate mt-1 flex items-center gap-2">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                            <span>YouTube Audio</span>
+                            <span>•</span>
+                            <span>{formatTime(trackDurationSec)}</span>
                           </p>
                         </div>
                       </div>
 
-                      {/* Actions: Track Loaded Badge + Clear Track Button */}
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className="text-[10px] font-mono text-emerald-400 font-bold flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Ready
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleClearPastedTrack}
-                          className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 border border-rose-500/40 text-[9.5px] font-mono text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
-                          title="Clear current track"
-                        >
-                          <X className="w-3 h-3" />
-                          <span>Clear</span>
-                        </button>
-                      </div>
+                      {/* Minimal Clear Button */}
+                      <button
+                        type="button"
+                        onClick={handleClearPastedTrack}
+                        className="px-2.5 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-[10px] font-mono text-rose-300 flex items-center gap-1 cursor-pointer transition-colors shadow-xs shrink-0 self-end sm:self-center"
+                        title="Clear track"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Clear</span>
+                      </button>
                     </div>
                   )}
 
@@ -937,7 +996,7 @@ export default function StudioModal({ onNoteCreated }) {
                           Community
                         </span>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-0.5">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-0.5 custom-scrollbar">
                         {sharedHotPool.map((t) => {
                           const isChosen = formik.values.externalSongUrl === t.externalSongUrl;
                           return (
@@ -968,8 +1027,8 @@ export default function StudioModal({ onNoteCreated }) {
                     </div>
                   )}
 
-                  <p className="text-[10px] text-[#91B9C5]/60 font-mono flex items-center gap-1">
-                    <span>💡</span>
+                  <p className="text-[10px] text-[#91B9C5]/80 font-mono flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>Paste any video or music link to instantly load title, artwork & audio snippet.</span>
                   </p>
                 </div>
@@ -995,7 +1054,7 @@ export default function StudioModal({ onNoteCreated }) {
 
                   {/* Dropdown Results */}
                   {searchResults.length > 0 && (
-                    <div className="bg-[#07131e] border border-[#1d4363] rounded-xl p-2 space-y-1 max-h-52 overflow-y-auto">
+                    <div className="bg-[#07131e] border border-[#1d4363] rounded-xl p-2 space-y-1 max-h-52 overflow-y-auto custom-scrollbar">
                       <p className="text-[9.5px] font-mono text-[#91B9C5]/60 px-1 mb-1">
                         Found {searchResults.length} tracks:
                       </p>
@@ -1040,8 +1099,8 @@ export default function StudioModal({ onNoteCreated }) {
                   <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#91B9C5]">
                     Audio snippet
                   </span>
-                  <span className="text-[10px] font-mono text-[#91B9C5]/70">
-                    ({formatTime(formik.values.audioSnippetStart)} – {formatTime(endSeconds)} / {formatTime(trackDurationSec)})
+                  <span ref={topTimeDisplayRef} className="text-[10px] font-mono text-[#91B9C5]/80">
+                    ({formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)} / {formatTime(trackDurationSec)})
                   </span>
                 </div>
 
@@ -1100,30 +1159,37 @@ export default function StudioModal({ onNoteCreated }) {
                     )}
                   </button>
 
-                  {/* Discrete Rounded Slender Audio Bars Scrubber */}
+                  {/* Discrete Rounded Slender Audio Bars Scrubber matching Screenshot */}
                   <div
                     ref={waveformRef}
                     onClick={handleWaveformClick}
-                    className="relative flex-1 h-14 px-2 py-1.5 rounded-xl bg-[#050e17] border border-[#11283d] overflow-hidden select-none cursor-ew-resize"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleDragStart(e.clientX);
+                    }}
+                    onTouchStart={(e) => {
+                      if (e.touches && e.touches[0]) {
+                        handleDragStart(e.touches[0].clientX);
+                      }
+                    }}
+                    className="relative flex-1 h-16 px-3 py-2 rounded-xl bg-[#050e17] border border-[#11283d] overflow-hidden select-none cursor-ew-resize flex items-center shadow-inner"
                     style={{ touchAction: 'none' }}
                   >
-                    {/* Discrete Slender Audio Bars SVG (Spotify Code pattern) */}
+                    {/* 1. Base Dimmed Audio Bars (2 bên tự động mờ đi) */}
                     <svg
-                      viewBox="0 0 390 40"
+                      viewBox="0 0 400 48"
                       preserveAspectRatio="none"
                       className="w-full h-full pointer-events-none"
                     >
-                      {/* Center Dashed Zero-Line */}
-                      <line x1="0" y1="20" x2="390" y2="20" stroke="#16334a" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.5" />
+                      {/* Center subtle guide line */}
+                      <line x1="0" y1="24" x2="400" y2="24" stroke="#16334a" strokeWidth="0.8" strokeDasharray="3 3" opacity="0.25" />
 
-                      {/* 60 Slender Vertical Capsule Bars */}
-                      {REFINED_ACOUSTIC_BARS.map((height, i) => {
-                        const x = 3 + (i / REFINED_ACOUSTIC_BARS.length) * 382;
-                        const barW = 1.8;
-                        const barProgress = (i / REFINED_ACOUSTIC_BARS.length) * trackDurationSec;
-                        const inRange = barProgress >= formik.values.audioSnippetStart && barProgress <= endSeconds;
-                        const barH = (height / 38) * 34;
-                        const barY = 20 - (barH / 2);
+                      {/* Dimmed Background Bars */}
+                      {INSTAGRAM_ACOUSTIC_BARS.map((height, i) => {
+                        const x = 4 + (i / INSTAGRAM_ACOUSTIC_BARS.length) * 392;
+                        const barW = 3.6;
+                        const barH = (height / 48) * 40;
+                        const barY = 24 - (barH / 2);
                         return (
                           <rect
                             key={i}
@@ -1131,52 +1197,83 @@ export default function StudioModal({ onNoteCreated }) {
                             y={barY}
                             width={barW}
                             height={barH}
-                            rx="0.9"
-                            fill={inRange ? '#91B9C5' : '#193850'}
-                            opacity={inRange ? '1' : '0.45'}
+                            rx="1.8"
+                            fill="#16344d"
+                            opacity="0.4"
                           />
                         );
                       })}
                     </svg>
 
-                    {/* Synchronized Zero-Lag Selection Frame (NO delay transition) */}
-                    <div
-                      className="absolute inset-y-1 pointer-events-none z-10 transition-none"
+                    {/* 2. Highlighted Crisp Audio Bars (Khung viền kéo tới đâu thì khúc đó sóng rõ) */}
+                    <svg
+                      ref={highlightedWaveformRef}
+                      viewBox="0 0 400 48"
+                      preserveAspectRatio="none"
+                      className="absolute inset-0 w-full h-full pointer-events-none transition-none"
                       style={{
-                        left: `${(formik.values.audioSnippetStart / trackDurationSec) * 100}%`,
+                        clipPath: `polygon(${(activeSnippetStart / trackDurationSec) * 100}% 0%, ${(activeSnippetEnd / trackDurationSec) * 100}% 0%, ${(activeSnippetEnd / trackDurationSec) * 100}% 100%, ${(activeSnippetStart / trackDurationSec) * 100}% 100%)`,
+                      }}
+                    >
+                      {INSTAGRAM_ACOUSTIC_BARS.map((height, i) => {
+                        const x = 4 + (i / INSTAGRAM_ACOUSTIC_BARS.length) * 392;
+                        const barW = 3.6;
+                        const barH = (height / 48) * 40;
+                        const barY = 24 - (barH / 2);
+                        return (
+                          <rect
+                            key={i}
+                            x={x}
+                            y={barY}
+                            width={barW}
+                            height={barH}
+                            rx="1.8"
+                            fill="#91B9C5"
+                            style={{ filter: 'drop-shadow(0 0 3px rgba(145, 185, 197, 0.75))' }}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {/* 3. Synchronized Zero-Lag Selection Frame (Instagram/Spotify capsule border with handles) */}
+                    <div
+                      ref={selectionFrameRef}
+                      className="absolute inset-y-1.5 pointer-events-none z-10 transition-none"
+                      style={{
+                        left: `${(activeSnippetStart / trackDurationSec) * 100}%`,
                         width: `${(snippetDuration / trackDurationSec) * 100}%`,
-                        borderLeft: '2px solid #91B9C5',
-                        borderRight: '2px solid #91B9C5',
-                        borderTop: '1px solid rgba(145, 185, 197, 0.3)',
-                        borderBottom: '1px solid rgba(145, 185, 197, 0.3)',
-                        background: 'rgba(145, 185, 197, 0.12)',
+                        borderLeft: '2.5px solid #91B9C5',
+                        borderRight: '2.5px solid #91B9C5',
+                        borderTop: '1px solid rgba(145, 185, 197, 0.35)',
+                        borderBottom: '1px solid rgba(145, 185, 197, 0.35)',
+                        background: 'rgba(145, 185, 197, 0.1)',
                       }}
                     >
                       {/* Left Handle Pill Grip */}
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-6 bg-[#91B9C5] rounded-full shadow-[0_0_6px_rgba(145,185,197,0.8)] flex items-center justify-center">
-                        <div className="w-0.5 h-2.5 bg-[#07131e]/70 rounded-full" />
+                      <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-2 h-7 bg-[#91B9C5] rounded-full shadow-[0_0_8px_rgba(145,185,197,0.85)] flex items-center justify-center">
+                        <div className="w-0.5 h-3 bg-[#07131e]/80 rounded-full" />
                       </div>
                       {/* Right Handle Pill Grip */}
-                      <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-2 h-6 bg-[#91B9C5] rounded-full shadow-[0_0_6px_rgba(145,185,197,0.8)] flex items-center justify-center">
-                        <div className="w-0.5 h-2.5 bg-[#07131e]/70 rounded-full" />
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-2 h-7 bg-[#91B9C5] rounded-full shadow-[0_0_8px_rgba(145,185,197,0.85)] flex items-center justify-center">
+                        <div className="w-0.5 h-3 bg-[#07131e]/80 rounded-full" />
                       </div>
                     </div>
-
-                    {/* Invisible Drag Area */}
-                    <div
-                      className="absolute inset-0 z-20 cursor-ew-resize"
-                      onMouseDown={handleDragBoxMouseDown}
-                    />
                   </div>
                 </div>
 
-                {/* Timestamps */}
-                <div className="flex items-center justify-between text-xs font-mono text-[#91B9C5] select-none">
-                  <span className="font-bold text-white">{formatTime(formik.values.audioSnippetStart)}</span>
-                  <span className="px-2 py-0.5 rounded-full bg-[#0d2233] border border-[#16354d] text-[10px] font-bold text-[#91B9C5]">
-                    {snippetDuration}s
+                {/* Dynamic Timestamps matching User request: (1:49 – 2:19 / 3:30) */}
+                <div className="flex items-center justify-between text-xs font-mono select-none px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span ref={timeDisplayRef} className="font-bold text-white text-xs">
+                      {formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)}
+                    </span>
+                    <span className="text-[#91B9C5]/60 text-[11px] font-mono">
+                      / {formatTime(trackDurationSec)}
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#0d2233] border border-[#16354d] text-[10.5px] font-bold text-[#91B9C5] font-mono">
+                    {snippetDuration}s snippet
                   </span>
-                  <span className="font-bold text-white">{formatTime(endSeconds)}</span>
                 </div>
 
                 {/* Quick Jumps (Dynamic chorus and verse) */}
@@ -1205,49 +1302,10 @@ export default function StudioModal({ onNoteCreated }) {
                     <span className="text-[10px] font-mono text-[#91B9C5]/60">({formatTime(dynamicVerseTime)})</span>
                   </button>
                 </div>
-
-                {/* Real YouTube Audio Playback Engine for 30s Snippet */}
-                {ytVideoId && isPreviewAudioPlaying && (
-                  <div className="bg-[#05111c] border border-cyan-500/40 rounded-xl p-2.5 flex items-center justify-between text-xs animate-in fade-in duration-200 shadow-sm">
-                    <div className="flex items-center gap-2.5">
-                      <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                      </span>
-                      <div>
-                        <p className="font-mono text-cyan-300 text-[11px] font-bold">
-                          Looping Snippet: {formatTime(formik.values.audioSnippetStart)} – {formatTime(endSeconds)}
-                        </p>
-                        <p className="text-[9.5px] text-[#91B9C5]/70 font-mono">
-                          Looping selected {snippetDuration}s snippet • Click Pause to stop
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsPreviewAudioPlaying(false)}
-                      className="text-[10px] font-mono text-rose-400 hover:text-rose-300 px-2.5 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 cursor-pointer transition-colors"
-                    >
-                      Pause ✕
-                    </button>
-
-                    {/* High-fidelity invisible YouTube player frame strictly confined to [start, end] and looped */}
-                    <div className="w-0.5 h-0.5 opacity-0 overflow-hidden absolute pointer-events-none -left-[9999px]">
-                      <iframe
-                        key={`${ytVideoId}-${formik.values.audioSnippetStart}-${snippetDuration}-${playbackKey}`}
-                        width="200"
-                        height="200"
-                        src={`https://www.youtube.com/embed/${ytVideoId}?autoplay=1&start=${formik.values.audioSnippetStart}&end=${formik.values.audioSnippetStart + snippetDuration}&controls=0`}
-                        title="Snippet Audio Preview"
-                        allow="autoplay; encrypted-media"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* 3. CAPTION & THOUGHTS (Image 1 Style: "What's on your mind?...") */}
+            {/* 3. CAPTION & THOUGHTS */}
             <div className="bg-[#0c1f2e] border border-[#16354d] rounded-2xl p-4 shadow-sm space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#91B9C5]">
@@ -1459,40 +1517,14 @@ export default function StudioModal({ onNoteCreated }) {
                   </button>
                 </div>
 
-                {/* EXPANDABLE DRAWER: Controlled with 2 Tabs (Default vs Search) */}
+                {/* EXPANDABLE BADGE DRAWER: Clean, Dynamic & Flexible */}
                 {showGifDrawer && (
                   <div className="pt-3 border-t border-[#16354d] space-y-3 animate-in fade-in slide-in-from-top-2 duration-150">
-
-                    {/* Drawer Navigation Bar: Default Suggestions vs Search */}
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1 bg-[#07131e] p-0.5 rounded-xl border border-[#16354d]">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDrawerTab('default');
-                            setGifSearchQuery('');
-                          }}
-                          className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${drawerTab === 'default'
-                              ? 'bg-[#183952] text-white shadow-xs'
-                              : 'text-[#91B9C5]/70 hover:text-white'
-                            }`}
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-[#91B9C5]" />
-                          <span>Curated Presets</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDrawerTab('search')}
-                          className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1.5 ${drawerTab === 'search'
-                              ? 'bg-[#183952] text-white shadow-xs'
-                              : 'text-[#91B9C5]/70 hover:text-white'
-                            }`}
-                        >
-                          <Search className="w-3.5 h-3.5 text-[#91B9C5]" />
-                          <span>Search</span>
-                        </button>
-                      </div>
-
+                      <span className="text-[10.5px] font-mono uppercase tracking-wider text-[#91B9C5] font-bold flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                        <span>Tactile Enamel Badges</span>
+                      </span>
                       <button
                         type="button"
                         onClick={() => setShowGifDrawer(false)}
@@ -1503,127 +1535,70 @@ export default function StudioModal({ onNoteCreated }) {
                       </button>
                     </div>
 
-                    {/* TAB 1: DEFAULT SUGGESTIONS (Curated Enamel Badges with Lucide Icons + Motion GIFs) */}
-                    {drawerTab === 'default' && (
-                      <div className="space-y-3">
-                        {/* 6 Iconic Enamel Badges with Lucide Icons */}
-                        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                          {[
-                            { id: 'Vinyl', label: 'Vinyl', icon: <Disc className="w-5 h-5 text-cyan-300" /> },
-                            { id: 'Headphones', label: 'Headphones', icon: <Headphones className="w-5 h-5 text-indigo-300" /> },
-                            { id: 'Heartbeat', label: 'Heartbeat', icon: <Heart className="w-5 h-5 text-rose-400 fill-rose-500/20" /> },
-                            { id: 'Equalizer', label: 'Equalizer', icon: <Sliders className="w-5 h-5 text-teal-300" /> },
-                            { id: 'Floating notes', label: 'Notes', icon: <Music className="w-5 h-5 text-purple-300" /> },
-                            { id: 'Orbit', label: 'Orbit', icon: <Globe className="w-5 h-5 text-amber-300" /> },
-                          ].map((item) => {
-                            const isSelected = formik.values.sealBadge === item.id;
-                            return (
-                              <button
-                                key={item.id}
-                                type="button"
-                                onClick={() => formik.setFieldValue('sealBadge', item.id)}
-                                className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${isSelected
-                                    ? 'bg-[#142e44] border-[#91B9C5] shadow-sm ring-1 ring-[#91B9C5]/40'
-                                    : 'bg-[#081724] border-[#16354d] hover:bg-[#0d2336] text-[#91B9C5]/80 hover:text-white'
-                                  }`}
-                              >
-                                <div className="h-6 flex items-center justify-center">
-                                  {item.icon}
-                                </div>
-                                <p className="text-[10px] font-mono font-bold text-white">
-                                  {item.label}
-                                </p>
-                              </button>
-                            );
-                          })}
-                        </div>
+                    {/* 6 Iconic Enamel Badges with Lucide Icons */}
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                      {[
+                        { id: 'Vinyl', label: 'Vinyl', icon: <Disc className="w-5 h-5 text-cyan-300" /> },
+                        { id: 'Headphones', label: 'Headphones', icon: <Headphones className="w-5 h-5 text-indigo-300" /> },
+                        { id: 'Heartbeat', label: 'Heartbeat', icon: <Heart className="w-5 h-5 text-rose-400 fill-rose-500/20" /> },
+                        { id: 'Equalizer', label: 'Equalizer', icon: <Sliders className="w-5 h-5 text-teal-300" /> },
+                        { id: 'Floating notes', label: 'Notes', icon: <Music className="w-5 h-5 text-purple-300" /> },
+                        { id: 'Orbit', label: 'Orbit', icon: <Globe className="w-5 h-5 text-amber-300" /> },
+                      ].map((item) => {
+                        const isSelected = formik.values.sealBadge === item.id;
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => formik.setFieldValue('sealBadge', item.id)}
+                            className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${isSelected
+                                ? 'bg-[#142e44] border-[#91B9C5] shadow-sm ring-1 ring-[#91B9C5]/40'
+                                : 'bg-[#081724] border-[#16354d] hover:bg-[#0d2336] text-[#91B9C5]/80 hover:text-white'
+                              }`}
+                          >
+                            <div className="h-6 flex items-center justify-center">
+                              {item.icon}
+                            </div>
+                            <p className="text-[10px] font-mono font-bold text-white">
+                              {item.label}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                        {/* Featured Aesthetic Motion GIFs */}
-                        <div>
-                          <p className="text-[10px] font-mono uppercase tracking-wider text-[#91B9C5]/70 mb-1.5">
-                            Motion lo-fi stickers
-                          </p>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {CURATED_AESTHETIC_GIFS.slice(0, 4).map((gif) => {
-                              const isSelected = formik.values.sealBadge === gif.url;
-                              return (
-                                <div
-                                  key={gif.id}
-                                  onClick={() => formik.setFieldValue('sealBadge', gif.url)}
-                                  className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${isSelected
-                                      ? 'bg-[#183952] border-[#91B9C5] shadow-md scale-[1.02]'
-                                      : 'bg-[#081724] border-[#183a54] hover:bg-[#0f2436]'
-                                    }`}
-                                >
-                                  <img
-                                    src={gif.url}
-                                    alt={gif.title}
-                                    loading="lazy"
-                                    className="w-full h-14 object-cover rounded-lg border border-white/10"
-                                  />
-                                  <p className="text-[9px] font-mono font-bold text-white truncate w-full text-center">
-                                    {gif.title}
-                                  </p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
+                    {/* Direct Image / GIF URL Input */}
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <LinkIcon className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#91B9C5]/50" />
+                        <input
+                          type="text"
+                          placeholder="Or paste direct image / GIF link (Giphy, Tenor, Imgur)..."
+                          value={customStickerUrl}
+                          onChange={(e) => {
+                            setCustomStickerUrl(e.target.value);
+                            if (e.target.value.trim().startsWith('http')) {
+                              formik.setFieldValue('sealBadge', e.target.value.trim());
+                            }
+                          }}
+                          className="w-full bg-[#081724] border border-[#183a54] rounded-xl pl-9 pr-14 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5] font-mono placeholder:text-[#91B9C5]/40"
+                        />
+                        {customStickerUrl && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomStickerUrl('');
+                              if (formik.values.sealBadge === customStickerUrl) {
+                                formik.setFieldValue('sealBadge', 'None');
+                              }
+                            }}
+                            className="absolute right-2 top-1.5 px-1.5 py-0.5 rounded bg-[#16354d] text-[#91B9C5] hover:text-white text-[10px] font-mono cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
-                    )}
-
-                    {/* TAB 2: SEARCH (Keywords, Custom Stickers, Categories) */}
-                    {drawerTab === 'search' && (
-                      <div className="space-y-3">
-                        {/* Search Input with Clear Button */}
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#91B9C5]/50" />
-                          <input
-                            type="text"
-                            placeholder="Search stickers (e.g. vinyl, tape, rain, cat, coffee)..."
-                            value={gifSearchQuery}
-                            onChange={(e) => setGifSearchQuery(e.target.value)}
-                            className="w-full bg-[#081724] border border-[#183a54] rounded-xl pl-9 pr-16 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-[#91B9C5] font-mono placeholder:text-[#91B9C5]/40"
-                          />
-                          {gifSearchQuery ? (
-                            <button
-                              type="button"
-                              onClick={() => setGifSearchQuery('')}
-                              className="absolute right-2.5 top-1.5 px-2 py-0.5 rounded bg-[#16354d] text-[#91B9C5] hover:text-white text-[10px] font-mono cursor-pointer"
-                            >
-                              Clear ✕
-                            </button>
-                          ) : null}
-                        </div>
-
-                        {/* Filtered GIFs Search Results */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-44 overflow-y-auto p-1">
-                          {filteredGifs.map((gif) => {
-                            const isSelected = formik.values.sealBadge === gif.url;
-                            return (
-                              <div
-                                key={gif.id}
-                                onClick={() => formik.setFieldValue('sealBadge', gif.url)}
-                                className={`p-1.5 rounded-xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${isSelected
-                                    ? 'bg-[#183952] border-[#91B9C5] shadow-md scale-[1.02]'
-                                    : 'bg-[#081724] border-[#183a54] hover:bg-[#0f2436]'
-                                  }`}
-                              >
-                                <img
-                                  src={gif.url}
-                                  alt={gif.title}
-                                  loading="lazy"
-                                  className="w-full h-12 object-cover rounded-lg border border-white/10"
-                                />
-                                <p className="text-[9px] font-mono font-bold text-white truncate">
-                                  {gif.title}
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    </div>
 
                     {/* Device upload & Keyboard emoji input with Mac & Windows shortcut hints */}
                     <div className="pt-2 border-t border-[#16354d]/50 flex items-center justify-between gap-2 text-xs">
@@ -1733,7 +1708,7 @@ export default function StudioModal({ onNoteCreated }) {
           {/* ------------------------------------------------------ */}
           {/* RIGHT COLUMN: LIVE REAL-TIME PROJECTION PREVIEW        */}
           {/* ------------------------------------------------------ */}
-          <div className="w-full lg:w-[42%] bg-[#06121d] border-t lg:border-t-0 lg:border-l border-[#1b3d59]/50 flex flex-col justify-between p-5 sm:p-6 items-center overflow-y-auto">
+          <div className="w-full lg:w-[42%] bg-[#06121d] border-t lg:border-t-0 lg:border-l border-[#1b3d59]/50 flex flex-col justify-between p-5 sm:p-6 items-center overflow-y-auto custom-scrollbar">
 
             {/* Header */}
             <div className="w-full flex items-center justify-between text-xs font-mono text-[#91B9C5] pb-3 border-b border-[#142c40]/60 shrink-0">
@@ -1746,20 +1721,40 @@ export default function StudioModal({ onNoteCreated }) {
               </span>
             </div>
 
-            {/* Center Live Artifact Stage */}
+            {/* Center Live Artifact Stage (Interactive: Click Card to Play/Pause snippet) */}
             <div className="w-full flex items-center justify-center my-auto py-4">
-              <MusicCard note={previewNote} />
+              <div
+                onClick={handleTogglePreviewAudio}
+                className="cursor-pointer group relative transition-transform hover:scale-[1.01] active:scale-[0.99] select-none"
+                title={isPreviewAudioPlaying ? "Click card to pause audio snippet" : "Click card to listen to snippet"}
+              >
+                <MusicCard note={previewNote} />
+              </div>
             </div>
 
-            {/* Bottom Audio Info Bar (Clean metadata without redundant button) */}
+            {/* Bottom Audio Info Bar (Interactive click to listen) */}
             <div className="w-full flex items-center justify-between pt-3 border-t border-[#142c40]/60 text-xs font-mono shrink-0">
               <span className="text-[#91B9C5]/80 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-[#91B9C5] animate-pulse" />
-                <span>Audio Snippet: <strong className="text-[#E8EEF0] font-bold">{snippetDuration}s</strong></span>
+                <span>Snippet: <strong className="text-[#E8EEF0] font-bold">{formatTime(activeSnippetStart)} – {formatTime(activeSnippetEnd)}</strong> <span className="text-[#91B9C5]/60 text-[10px]">/ {formatTime(trackDurationSec)}</span></span>
               </span>
-              <span className="text-[11px] text-[#91B9C5]/60 font-mono">
-                Click card to listen
-              </span>
+              <button
+                type="button"
+                onClick={handleTogglePreviewAudio}
+                className="text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer hover:underline"
+              >
+                {isPreviewAudioPlaying ? (
+                  <span className="text-rose-400 flex items-center gap-1 font-bold">
+                    <Volume2 className="w-3.5 h-3.5 animate-pulse" />
+                    Click card to pause
+                  </span>
+                ) : (
+                  <span className="text-[#91B9C5]/80 hover:text-white flex items-center gap-1">
+                    <Volume2 className="w-3.5 h-3.5" />
+                    Click card to listen
+                  </span>
+                )}
+              </button>
             </div>
 
           </div>
@@ -1767,6 +1762,26 @@ export default function StudioModal({ onNoteCreated }) {
         </div>
 
       </div>
+
+      {/* Persistent Zero-RAM Audio Engine (1x1 viewport iframe, zero visual decoding, active Chrome tab) */}
+      {ytVideoId && (
+        <iframe
+          ref={playerIframeRef}
+          key={ytVideoId}
+          src={`https://www.youtube-nocookie.com/embed/${ytVideoId}?enablejsapi=1&autoplay=${isPreviewAudioPlaying ? 1 : 0}&start=${formik.values.audioSnippetStart}&controls=0&disablekb=1&fs=0&rel=0&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`}
+          title="Snippet Audio Engine"
+          className="w-px h-px pointer-events-none opacity-0 fixed bottom-0 left-0 z-0"
+          onLoad={() => {
+            if (playerIframeRef.current?.contentWindow) {
+              playerIframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1 }), '*');
+              playerIframeRef.current.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'getDuration', args: [] }), '*');
+            }
+          }}
+          allow="autoplay; encrypted-media"
+          tabIndex={-1}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 }
