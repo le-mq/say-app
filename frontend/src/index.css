@@ -1,25 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  /* Dark Canvas Colors */
-  --color-bg: #081724;             /* Midnight Night - Nền chính */
-  --color-surface: #142C40;        /* Petrol Blue - Nền Card & Container */
-  --color-surface-elevated: #31566A;/* Ocean Blue - Floating UI, Modal, Tooltip */
+  /* Dark Petrol Canvas Colors - Deep midnight blue with subtle audiophile warmth */
+  --color-bg: #081724;             /* Midnight Petrol Deep Blue - Nền chính */
+  --color-surface: #0d2235;        /* Petrol Surface - Nền Card & Container */
+  --color-surface-elevated: #132e45;/* Elevated Petrol Slate - Floating UI, Modal */
   
   /* Brand & Interactive Accents */
-  --color-primary: #91B9C5;        /* Mist Blue - Waveform, Slider, Active State */
-  --color-accent: #B39DDB;         /* Dusty Lavender - Reaction, Mood, Highlight */
+  --color-primary: #91B9C5;        /* Mist Blue / Petrol Teal */
+  --color-accent: #38bdf8;         /* Cyan Neon Glow */
+  --color-accent-amber: #fbbf24;   /* Champagne Amber Gold (SAY logo) */
+  --color-accent-violet: #a78bfa;  /* Subtle Lavender Mist (SAY logo) */
   
   /* Content & Typography */
-  --color-text: #E8EEF0;           /* Soft White - Chữ chính */
-  --color-text-muted: #A7B8C3;     /* Muted Blue Grey - Chữ phụ, Timestamp */
+  --color-text: #E8EEF0;           /* Pure Soft Frost White */
+  --color-text-muted: #7E9BA8;     /* Petrol Muted Grey-Blue */
   
   /* Physical Music Note Surfaces */
   --color-note-cream: #F2EDE3;     /* Warm Cream - Thẻ Receipt / Cassette giấy */
   --color-note-text: #1C2833;       /* Chữ in máy trên nền Cream */
   
   /* Glassmorphism Overlays */
-  --glass-bg: rgba(20, 44, 64, 0.65);
+  --glass-bg: rgba(13, 34, 53, 0.75);
   --glass-border: rgba(145, 185, 197, 0.15);
 }
 
@@ -34,11 +36,11 @@
   --color-say-cream: var(--color-note-cream);
 
   --color-midnight-bg: #081724;
-  --color-midnight-surface: #142C40;
-  --color-midnight-elevated: #31566A;
-  --color-midnight-accent: #91B9C5;
+  --color-midnight-surface: #0d2235;
+  --color-midnight-elevated: #132e45;
+  --color-midnight-accent: #38bdf8;
   --color-midnight-text: #E8EEF0;
-  --color-lavender-accent: #B39DDB;
+  --color-lavender-accent: #a78bfa;
   --color-warm-cream: #F2EDE3;
 }
 
@@ -96,54 +98,61 @@ body {
 /* ======================================================== */
 /* ULTRA-SLEEK MINIMALIST SCROLLBAR (Zero buttons / arrows) */
 /* ======================================================== */
-* {
-  scrollbar-width: thin !important;
-  scrollbar-color: rgba(145, 185, 197, 0.3) transparent !important;
+/* Firefox only fallback: standard scrollbar */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(145, 185, 197, 0.35) transparent;
+  }
 }
 
-*::-webkit-scrollbar {
+/* WebKit / Chromium (Chrome, Edge, Brave, Opera, Safari on Windows):
+   Must NOT use scrollbar-width so Windows does not render native OS arrow buttons */
+::-webkit-scrollbar {
   width: 5px !important;
   height: 5px !important;
 }
 
-*::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: transparent !important;
 }
 
-*::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: rgba(145, 185, 197, 0.3) !important;
   border-radius: 9999px !important;
 }
 
-*::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: rgba(145, 185, 197, 0.6) !important;
 }
 
 /* Eliminate browser scrollbar arrows / buttons completely on Windows (Chrome, Edge, Safari, Brave) */
-*::-webkit-scrollbar-button,
-*::-webkit-scrollbar-button:single-button,
-*::-webkit-scrollbar-button:vertical:start:decrement,
-*::-webkit-scrollbar-button:vertical:end:increment,
-*::-webkit-scrollbar-button:horizontal:start:decrement,
-*::-webkit-scrollbar-button:horizontal:end:increment {
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:vertical:decrement,
+::-webkit-scrollbar-button:vertical:increment,
+::-webkit-scrollbar-button:horizontal:decrement,
+::-webkit-scrollbar-button:horizontal:increment,
+::-webkit-scrollbar-button:start:decrement,
+::-webkit-scrollbar-button:end:increment {
   display: none !important;
   width: 0px !important;
   height: 0px !important;
   background: transparent !important;
   border: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
-*::-webkit-scrollbar-corner {
+::-webkit-scrollbar-corner {
   display: none !important;
   background: transparent !important;
 }
 
-.custom-scrollbar {
-  scrollbar-width: thin !important;
-  scrollbar-color: rgba(145, 185, 197, 0.35) transparent !important;
-}
+/* Custom scrollbar class for modals & cards - Zero buttons / arrows */
 .custom-scrollbar::-webkit-scrollbar {
   width: 5px !important;
+  height: 5px !important;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent !important;
@@ -152,10 +161,15 @@ body {
   background: rgba(145, 185, 197, 0.35) !important;
   border-radius: 9999px !important;
 }
-.custom-scrollbar::-webkit-scrollbar-button {
+.custom-scrollbar::-webkit-scrollbar-button,
+.custom-scrollbar::-webkit-scrollbar-button:single-button,
+.custom-scrollbar::-webkit-scrollbar-button:vertical:decrement,
+.custom-scrollbar::-webkit-scrollbar-button:vertical:increment {
   display: none !important;
   width: 0 !important;
   height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .bg-grid-dots {

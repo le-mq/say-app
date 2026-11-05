@@ -4,7 +4,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { CheckCircle2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import Navbar from '../components/Navbar';
-import PlayerDock from '../components/PlayerDock';
+import GlobalPlayerDock from '../components/GlobalPlayerDock';
 import StudioModal from '../components/StudioModal';
 import LoginModal from '../components/LoginModal';
 import SplashScreen from '../components/SplashScreen';
@@ -29,7 +29,7 @@ export default function MainLayout() {
       </main>
 
       {/* Persistent Audio Dock (Never unmounts or interrupts music during page transitions) */}
-      <PlayerDock />
+      <GlobalPlayerDock />
 
       {/* Global Creative Studio Modal */}
       <StudioModal />

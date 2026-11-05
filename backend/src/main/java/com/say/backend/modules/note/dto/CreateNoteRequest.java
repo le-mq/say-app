@@ -12,7 +12,7 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CreateNoteRequest {
-    private UUID userId;
+    private String userId;
     private String songTitle;
     private String artistName;
     private String songImageUrl;
