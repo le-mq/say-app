@@ -1,54 +1,74 @@
 import { useState, useEffect } from 'react';
-
-let listeners = [];
-let state = {
-  currentTrack: null,
-  isPlaying: false,
-  currentTime: 0,
-};
-
-function notify() {
-  listeners.forEach(fn => fn(state));
-}
+import { playbackService } from '../services/MusicPlaybackService';
 
 export const playerStore = {
-  getState: () => state,
+  getState: () => {
+    const snap = playbackService.getSnapshot();
+    return {
+      currentTrack: snap.currentTrack,
+      isPlaying: snap.isPlaying,
+      isBuffering: snap.isBuffering,
+      currentTime: snap.currentTime,
+      duration: snap.duration,
+      playbackState: snap.playbackState,
+      sourceType: snap.sourceType,
+      errorMessage: snap.errorMessage,
+      volume: snap.volume ?? 0.85,
+      isMuted: snap.isMuted ?? false,
+    };
+  },
   subscribe: (listener) => {
-    listeners.push(listener);
-    return () => {
-      listeners = listeners.filter(l => l !== listener);
-    };
+    return playbackService.subscribe((snap) => {
+      listener({
+        currentTrack: snap.currentTrack,
+        isPlaying: snap.isPlaying,
+        isBuffering: snap.isBuffering,
+        currentTime: snap.currentTime,
+        duration: snap.duration,
+        playbackState: snap.playbackState,
+        sourceType: snap.sourceType,
+        errorMessage: snap.errorMessage,
+        isLooping: snap.isLooping,
+        volume: snap.volume ?? 0.85,
+        isMuted: snap.isMuted ?? false,
+      });
+    });
   },
-  loadTrack: (track, snippetStart = 0) => {
-    state = {
-      ...state,
-      currentTrack: { ...track, snippetStart },
-      isPlaying: false,
-      currentTime: snippetStart,
-    };
-    notify();
+  loadTrack: (track, options = null) => {
+    const opts = typeof options === 'number' 
+      ? { snippetStart: options } 
+      : (options || { snippetStart: Number(track?.audioSnippetStart) || 0, snippetDuration: Number(track?.snippetDuration) || 30 });
+    playbackService.loadTrack(track, opts);
   },
-  playTrack: (track, snippetStart = 0) => {
-    state = {
-      ...state,
-      currentTrack: { ...track, snippetStart },
-      isPlaying: true,
-      currentTime: snippetStart,
-    };
-    notify();
+  playTrack: (track, options = null) => {
+    const opts = typeof options === 'number' 
+      ? { snippetStart: options } 
+      : (options || { snippetStart: Number(track?.audioSnippetStart) || 0, snippetDuration: Number(track?.snippetDuration) || 30, loop: true });
+    playbackService.playTrack(track, opts);
+  },
+  setLooping: (loop) => {
+    playbackService.setLooping(loop);
+  },
+  setVolume: (vol) => {
+    playbackService.setVolume(vol);
+  },
+  toggleMute: () => {
+    playbackService.toggleMute();
   },
   togglePlay: () => {
-    if (!state.currentTrack) return;
-    state = { ...state, isPlaying: !state.isPlaying };
-    notify();
+    playbackService.togglePlay();
   },
   pauseTrack: () => {
-    state = { ...state, isPlaying: false };
-    notify();
+    playbackService.pause();
   },
   stopTrack: () => {
-    state = { ...state, currentTrack: null, isPlaying: false, currentTime: 0 };
-    notify();
+    playbackService.stop();
+  },
+  seekTo: (seconds) => {
+    playbackService.seekTo(seconds);
+  },
+  seekSnippet: (startSec, duration, autoPlay = null) => {
+    playbackService.seekSnippet(startSec, duration, autoPlay);
   },
 };
 
@@ -67,6 +87,10 @@ export function usePlayerStore() {
     togglePlay: playerStore.togglePlay,
     pauseTrack: playerStore.pauseTrack,
     stopTrack: playerStore.stopTrack,
+    seekTo: playerStore.seekTo,
+    seekSnippet: playerStore.seekSnippet,
+    setLooping: playerStore.setLooping,
+    setVolume: playerStore.setVolume,
+    toggleMute: playerStore.toggleMute,
   };
 }
-

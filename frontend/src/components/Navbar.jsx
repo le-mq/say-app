@@ -35,6 +35,7 @@ export default function Navbar() {
   const currentPath = location.pathname;
   const isExplore = currentPath === '/' || currentPath.startsWith('/feed') || currentPath.startsWith('/landing');
   const isFriends = currentPath.startsWith('/friends');
+  const isUniverse = currentPath.startsWith('/universe');
   const isProfile = currentPath.startsWith('/profile');
 
   // Compute initials (e.g. "Linh Tran" -> "LT")
@@ -45,7 +46,7 @@ export default function Navbar() {
   const streakDisplay = user?.streakDays || 14;
 
   return (
-    <header className="sticky top-0 z-40 bg-[#07131e]/95 backdrop-blur-md border-b border-[#12283a]/80 transition-colors">
+    <header className="sticky top-0 z-40 bg-[#081724]/95 backdrop-blur-md border-b border-[#142c40]/80 transition-colors">
       <div className="relative max-w-[1520px] w-full mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         
         {/* 1. LEFT SECTION: BRAND IDENTITY (Favicon enlarged for crisp typography + no repetitive SAY/slogan) */}
@@ -54,8 +55,8 @@ export default function Navbar() {
           className="flex items-center gap-3 cursor-pointer group select-none shrink-0"
           title="SAY - Sound Around You"
         >
-          {/* Favicon App Mark (enlarged to 40-44px so the custom serif font & wave are clearly legible) */}
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[14px] overflow-hidden bg-[#0f2435] border border-[#1e4463]/90 flex items-center justify-center shadow-md group-hover:border-[#91B9C5]/60 group-hover:shadow-[0_0_18px_rgba(145,185,197,0.28)] group-hover:scale-[1.04] transition-all shrink-0">
+          {/* Favicon App Mark */}
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-[14px] overflow-hidden bg-[#0f2435] border border-[#1e4463]/90 flex items-center justify-center shadow-md group-hover:border-[#91B9C5]/80 group-hover:shadow-[0_0_18px_rgba(145,185,197,0.25)] group-hover:scale-[1.04] transition-all shrink-0">
             <img
               src="/say-favicon.svg"
               alt="SAY - Sound Around You"
@@ -63,7 +64,7 @@ export default function Navbar() {
             />
           </div>
 
-          {/* Brand Wordmark: "Sound Around You" (Resolves duplicate "SAY" & eliminates repetitive slogan) */}
+          {/* Brand Wordmark: "Sound Around You" */}
           <div className="hidden sm:flex flex-col justify-center leading-none">
             <span className="font-serif font-bold text-[14px] sm:text-[15px] tracking-wide text-[#E8EEF0] group-hover:text-[#91B9C5] transition-colors">
               Sound Around You
@@ -99,28 +100,28 @@ export default function Navbar() {
             <span>Friends</span>
           </button>
 
-          {/* Tab 3: Profile */}
+          {/* Tab 3: My Universe */}
           <button
-            onClick={() => navigate('/profile')}
+            onClick={() => navigate('/universe')}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-              isProfile
-                ? 'bg-[#183952] text-[#E8EEF0] shadow-sm border border-[#235073]'
+              isUniverse
+                ? 'bg-[#183952] text-cyan-200 shadow-sm border border-cyan-500/50'
                 : 'text-[#91B9C5]/70 hover:text-[#E8EEF0] hover:bg-[#112638]'
             }`}
           >
-            <User className="w-3.5 h-3.5" />
-            <span>Profile</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>My Universe</span>
           </button>
         </nav>
 
         {/* 3. RIGHT SECTION: STUDIO AUDIO WAVE BUTTON & USER STATUS PILL */}
         <div className="flex items-center gap-3">
           
-          {/* Modern Audiophile "Create Note" Action Button */}
+          {/* Modern Audiophile "Create Note" Action Button - Deep Petrol with Cyan/Mist Accent */}
           <button
             type="button"
             onClick={() => setStudioOpen(true)}
-            className="flex items-center gap-1.5 px-3 sm:px-3.5 h-9 rounded-full bg-gradient-to-r from-[#122e44] to-[#163852] hover:from-[#183d5a] hover:to-[#1e4d73] border border-[#23527a] hover:border-cyan-400/80 text-cyan-300 hover:text-white shadow-sm hover:shadow-[0_0_16px_rgba(34,211,238,0.35)] transition-all duration-200 cursor-pointer active:scale-95 group"
+            className="flex items-center gap-1.5 px-3.5 sm:px-4 h-9 rounded-full bg-gradient-to-r from-[#122e44] to-[#183e5c] hover:from-[#183d5a] hover:to-[#22557d] border border-[#23527a] hover:border-cyan-400 text-cyan-300 hover:text-white shadow-sm hover:shadow-[0_0_16px_rgba(34,211,238,0.3)] transition-all duration-200 cursor-pointer active:scale-95 group"
             title="Create New Audio Note"
             aria-label="Create New Audio Note"
           >
@@ -172,12 +173,24 @@ export default function Navbar() {
                       type="button"
                       onClick={() => {
                         setIsUserMenuOpen(false);
+                        navigate('/universe');
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#E8EEF0] hover:bg-[#142C40] hover:text-white text-left transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                      <span>My Universe</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
                         navigate('/profile');
                       }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#E8EEF0] hover:bg-[#142C40] hover:text-white text-left transition-colors cursor-pointer"
                     >
                       <User className="w-3.5 h-3.5 text-[#91B9C5]" />
-                      <span>Profile Vault</span>
+                      <span>Profile & Notes</span>
                     </button>
 
                     <div className="h-px bg-[#142e44] my-1" />

@@ -96,15 +96,43 @@ export default function LoginModal() {
                   localStorage.removeItem('say_token');
                 } catch {}
 
-                const guaranteedId = authenticatedUser.id || ('usr_' + Math.random().toString(36).substring(2, 10));
+                const guaranteedId = (authenticatedUser.id && authenticatedUser.id.length === 36 && authenticatedUser.id.includes('-'))
+                  ? authenticatedUser.id
+                  : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0000000-0000-0000-0000-000000000001');
                 const resolvedUser = {
                   ...authenticatedUser,
                   id: guaranteedId,
                   token,
                 };
 
+                // Check if this user has already completed one-time username setup
+                const userKey = googleProfile.email || guaranteedId;
+                const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
+                const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
+                const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
+
+                if (isSetupDone && savedHandle) {
+                  // User already configured username previously: log in seamlessly without prompting!
+                  const safeUser = {
+                    id: guaranteedId,
+                    displayName: savedDisplayName || authenticatedUser.displayName || 'Audiophile',
+                    handle: savedHandle,
+                    avatarUrl: authenticatedUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
+                    audiophileRank: authenticatedUser.audiophileRank || "Vinyl Connoisseur",
+                    bio: authenticatedUser.bio || "Curating timeless records on SAY.",
+                    streakDays: authenticatedUser.streakDays || 14,
+                    bestStreakDays: authenticatedUser.bestStreakDays || 28,
+                    notesCount: authenticatedUser.notesCount || 3,
+                  };
+                  setUser(safeUser);
+                  toast.success(`Welcome back, ${safeUser.displayName}!`);
+                  handleClose();
+                  navigate('/feed');
+                  return;
+                }
+
+                // First-time user only: show one-time profile & username setup modal
                 const initialDisplayName = authenticatedUser.displayName || 'Audiophile';
-                // Preserve casing while normalizing accents & spaces
                 const initialUsername = initialDisplayName
                   .normalize('NFD')
                   .replace(/[\u0300-\u036f]/g, '')
@@ -156,6 +184,26 @@ export default function LoginModal() {
         localStorage.removeItem('say_token');
       } catch {}
 
+      // Check if simulated user has already completed one-time username setup
+      const userKey = payload.email || userResult.id;
+      const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
+      const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
+      const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
+
+      if (isSetupDone && savedHandle) {
+        const safeUser = {
+          ...userResult,
+          displayName: savedDisplayName || userResult.displayName || "Sonic Wanderer 🎧",
+          handle: savedHandle,
+        };
+        setUser(safeUser);
+        toast.success(`Welcome back, ${safeUser.displayName}!`);
+        handleClose();
+        navigate('/feed');
+        return;
+      }
+
+      // First-time user only: show username setup
       setTempUser(userResult);
       setCustomDisplayName("Sonic Wanderer 🎧");
       setCustomUsername("SonicWanderer");
@@ -173,6 +221,25 @@ export default function LoginModal() {
       try {
         localStorage.removeItem('say_token');
       } catch {}
+
+      const userKey = "audiophile.wanderer@gmail.com";
+      const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
+      const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
+      const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
+
+      if (isSetupDone && savedHandle) {
+        const safeUser = {
+          ...fallbackUser,
+          displayName: savedDisplayName || fallbackUser.displayName,
+          handle: savedHandle,
+        };
+        setUser(safeUser);
+        toast.success(`Welcome back, ${safeUser.displayName}!`);
+        handleClose();
+        navigate('/feed');
+        return;
+      }
+
       setTempUser(fallbackUser);
       setCustomDisplayName("Sonic Wanderer 🎧");
       setCustomUsername("SonicWanderer");
@@ -189,7 +256,9 @@ export default function LoginModal() {
     // Preserve uppercase letters in username, strictly no emojis or invalid chars
     const cleanUsername = customUsername.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'Listener';
     const formattedHandle = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
-    const userId = tempUser.id || ('usr_' + Math.random().toString(36).substring(2, 10));
+    const userId = (tempUser.id && tempUser.id.length === 36 && tempUser.id.includes('-'))
+      ? tempUser.id
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0000000-0000-0000-0000-000000000001');
 
     // Security: Only store session token in sessionStorage, never in localStorage
     if (tempUser.token) {
@@ -211,6 +280,12 @@ export default function LoginModal() {
       bestStreakDays: tempUser.bestStreakDays || 28,
       notesCount: tempUser.notesCount || 3,
     };
+
+    // Mark one-time setup as completed permanently for this user
+    const userKey = tempUser.email || userId;
+    localStorage.setItem(`say_setup_done_${userKey}`, 'true');
+    localStorage.setItem(`say_handle_${userKey}`, formattedHandle);
+    localStorage.setItem(`say_name_${userKey}`, finalDisplayName);
 
     try {
       if (tempUser.id && String(tempUser.id).length > 20) {

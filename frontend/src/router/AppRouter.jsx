@@ -6,6 +6,7 @@ import Landing from '../pages/Landing';
 import Feed from '../pages/Feed';
 import Profile from '../pages/Profile';
 import Friends from '../pages/Friends';
+import MyUniverse from '../pages/MyUniverse';
 import NotFound from '../pages/NotFound';
 
 const router = createBrowserRouter([
@@ -16,6 +17,8 @@ const router = createBrowserRouter([
       // Public Feed Routes (Accessible directly to all visitors)
       { index: true, element: <Feed /> },
       { path: 'feed', element: <Feed /> },
+      { path: 'universe', element: <PrivateRoute Component={MyUniverse} /> },
+      { path: 'my-universe', element: <Navigate to="/universe" replace /> },
       { path: 'profile', element: <PrivateRoute Component={Profile} /> },
       { path: 'friends', element: <PrivateRoute Component={Friends} /> },
 
