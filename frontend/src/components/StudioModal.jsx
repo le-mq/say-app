@@ -109,14 +109,15 @@ export default function StudioModal({ onNoteCreated }) {
       return;
     }
 
+    if (!user?.id) {
+      toast.error('Please sign in to compose and publish a note.');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const validUserId = (user?.id && user.id.length === 36 && user.id.includes('-'))
-      ? user.id
-      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0000000-0000-0000-0000-000000000001');
-
     const payload = {
-      userId: validUserId,
+      userId: user.id,
       songTitle: selectedTrack.songTitle.trim(),
       artistName: selectedTrack.artistName.trim(),
       songImageUrl: selectedTrack.songImageUrl.trim(),

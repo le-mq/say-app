@@ -11,8 +11,7 @@ export default function PrivateRoute({ Component }) {
   const isAuthenticated = Boolean(token || user?.id);
 
   if (!isAuthenticated) {
-    // Open login modal and redirect to main feed
-    setTimeout(() => authStore.setLoginModalOpen(true), 120);
+    // Gracefully redirect to feed when unauthenticated (NO automatic modal popup)
     return <Navigate to="/feed" state={{ from: location }} replace />;
   }
 

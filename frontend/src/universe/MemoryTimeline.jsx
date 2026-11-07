@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
-import { Play, Disc, Calendar, Music, Clock } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Play, Pause, Disc, Calendar, Music, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatTimeDetails } from '../utils/timeFormat';
 
 /**
  * Format timestamp into display date e.g. "05 NOV" and group key "NOVEMBER 2026"
@@ -26,20 +27,32 @@ function parseDate(dateStr) {
 export default function MemoryTimeline({
   notes = [],
   activeNoteId = null,
+  isPlaying = false,
   onSelectNote,
   onPlayNote,
   onCreateNote
 }) {
-  // Sort notes descending by createdAt and group by "MONTH YEAR"
-  const groupedNotes = useMemo(() => {
-    const sorted = [...notes].sort((a, b) => {
+  const PAGE_SIZE = 6;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Sort notes descending by createdAt
+  const sortedNotes = useMemo(() => {
+    return [...notes].sort((a, b) => {
       const timeA = new Date(a.createdAt || 0).getTime();
       const timeB = new Date(b.createdAt || 0).getTime();
       return timeB - timeA;
     });
+  }, [notes]);
 
+  const totalPages = Math.ceil(sortedNotes.length / PAGE_SIZE) || 1;
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const paginatedNotes = sortedNotes.slice(startIndex, startIndex + PAGE_SIZE);
+
+  // Group current page's notes by "MONTH YEAR"
+  const groupedNotes = useMemo(() => {
     const groups = {};
-    sorted.forEach((note) => {
+    paginatedNotes.forEach((note) => {
       const parsed = parseDate(note.createdAt);
       if (!groups[parsed.groupKey]) {
         groups[parsed.groupKey] = [];
@@ -51,7 +64,7 @@ export default function MemoryTimeline({
     });
 
     return groups;
-  }, [notes]);
+  }, [paginatedNotes]);
 
   const groupKeys = Object.keys(groupedNotes);
 
@@ -77,7 +90,7 @@ export default function MemoryTimeline({
   }
 
   return (
-    <div className="w-full space-y-8 select-none">
+    <div className="w-full space-y-8 select-text">
       {groupKeys.map((groupKey) => (
         <div key={groupKey} className="space-y-4">
           {/* Timeline Group Header (e.g. NOVEMBER 2026) */}
@@ -91,7 +104,8 @@ export default function MemoryTimeline({
           {/* Timeline Items List */}
           <div className="relative pl-6 sm:pl-8 border-l border-[#193a54] space-y-4 ml-3 sm:ml-4">
             {groupedNotes[groupKey].map((note) => {
-              const isPlaying = activeNoteId === note.id;
+              const isTrackPlaying = isPlaying && activeNoteId === note.id;
+              const timeInfo = formatTimeDetails(note.createdAt);
 
               return (
                 <div
@@ -101,7 +115,7 @@ export default function MemoryTimeline({
                   {/* Timeline Indicator Dot */}
                   <div
                     className={`absolute -left-[31px] sm:-left-[39px] top-4 w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
-                      isPlaying
+                      isTrackPlaying
                         ? 'bg-cyan-300 border-cyan-400 ring-4 ring-cyan-400/30 scale-125'
                         : 'bg-[#081724] border-[#91B9C5] group-hover:border-cyan-300 group-hover:scale-110'
                     }`}
@@ -109,18 +123,39 @@ export default function MemoryTimeline({
 
                   {/* Note Card Row */}
                   <div className={`p-4 rounded-2xl bg-[#0a1f33]/80 hover:bg-[#0d2842] border transition-all duration-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                    isPlaying ? 'border-cyan-400/60 shadow-[0_0_20px_rgba(34,211,238,0.15)]' : 'border-[#14324d] hover:border-[#1d476d]'
+                    isTrackPlaying ? 'border-cyan-400/60 shadow-[0_0_20px_rgba(34,211,238,0.15)]' : 'border-[#14324d] hover:border-[#1d476d]'
                   }`}>
                     
-                    {/* Left: Day Badge & Track Info */}
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
-                      {/* Day Badge */}
-                      <span className="text-[11px] font-mono font-bold text-[#91B9C5]/80 px-2.5 py-1.5 rounded-xl bg-[#071726] border border-[#15344f] shrink-0">
-                        {note.dayBadge}
-                      </span>
+                    {/* Left: Day & Exact Time Badge + Track Info */}
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                      {/* Day & Exact Time Badge */}
+                      <div className="flex flex-col items-center justify-center px-2.5 py-1.5 rounded-xl bg-[#071726] border border-[#15344f] shrink-0 text-center min-w-[70px]">
+                        {timeInfo.isToday ? (
+                          <>
+                            <span className="text-[11px] font-mono font-bold text-cyan-300 leading-tight">
+                              {timeInfo.relative}
+                            </span>
+                            <span className="text-[9px] font-mono text-[#91B9C5]/60 mt-0.5">
+                              Today
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-[11px] font-mono font-bold text-[#E8EEF0] leading-tight">
+                              {note.dayBadge}
+                            </span>
+                            <span className="text-[9px] font-mono font-semibold text-cyan-300/90 flex items-center gap-0.5 mt-0.5">
+                              <Clock className="w-2.5 h-2.5" />
+                              {timeInfo.time}
+                            </span>
+                          </>
+                        )}
+                      </div>
 
-                      {/* Song Cover Art */}
-                      <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-[#1b4366] shrink-0 bg-[#071625]">
+                      {/* Song Cover Art (Clean, unobstructed view) */}
+                      <div className={`relative w-12 h-12 rounded-xl overflow-hidden border shrink-0 bg-[#071625] transition-all ${
+                        isTrackPlaying ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.3)]' : 'border-[#1b4366]'
+                      }`}>
                         <img
                           src={note.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120'}
                           alt={note.songTitle}
@@ -129,11 +164,6 @@ export default function MemoryTimeline({
                             e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120';
                           }}
                         />
-                        {isPlaying && (
-                          <div className="absolute inset-0 bg-[#081724]/70 flex items-center justify-center">
-                            <Disc className="w-5 h-5 text-cyan-300 animate-spin" />
-                          </div>
-                        )}
                       </div>
 
                       {/* Metadata & Personal Note */}
@@ -165,16 +195,16 @@ export default function MemoryTimeline({
                         type="button"
                         onClick={() => onPlayNote && onPlayNote(note)}
                         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          isPlaying
+                          isTrackPlaying
                             ? 'bg-cyan-400 text-[#081827] shadow-[0_0_12px_rgba(34,211,238,0.5)]'
                             : 'bg-[#122e47] hover:bg-[#1a4061] text-[#E8EEF0] border border-[#1e486e]'
                         }`}
-                        title={isPlaying ? 'Now Playing' : 'Play Snippet'}
+                        title={isTrackPlaying ? 'Pause Snippet' : 'Play Snippet'}
                       >
-                        {isPlaying ? (
+                        {isTrackPlaying ? (
                           <>
-                            <Disc className="w-3.5 h-3.5 animate-spin" />
-                            <span>Playing</span>
+                            <Pause className="w-3.5 h-3.5 fill-current" />
+                            <span>Pause</span>
                           </>
                         ) : (
                           <>
@@ -200,6 +230,33 @@ export default function MemoryTimeline({
           </div>
         </div>
       ))}
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-[#14324d]">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0e273d] hover:bg-[#163a59] disabled:opacity-40 disabled:pointer-events-none text-xs font-bold text-[#E8EEF0] border border-[#1b4366] transition-all cursor-pointer shadow-sm"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Previous</span>
+          </button>
+          <span className="text-xs font-mono font-bold text-[#91B9C5]">
+            Page {safePage} of {totalPages} ({notes.length} total)
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0e273d] hover:bg-[#163a59] disabled:opacity-40 disabled:pointer-events-none text-xs font-bold text-[#E8EEF0] border border-[#1b4366] transition-all cursor-pointer shadow-sm"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

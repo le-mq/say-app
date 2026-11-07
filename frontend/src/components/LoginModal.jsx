@@ -7,7 +7,7 @@ import { toast } from 'react-toastify';
 
 export default function LoginModal() {
   const navigate = useNavigate();
-  const { isLoginModalOpen, setLoginModalOpen, setUser, loginAsGuest } = useAuthStore();
+  const { isLoginModalOpen, setLoginModalOpen, setUser } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Custom profile onboarding after first Google login
@@ -53,7 +53,7 @@ export default function LoginModal() {
     setCustomUsername(clean);
   };
 
-  // Google Single Sign-On (Zero Password Storage & Zero Sensitive Data in localStorage)
+  // Google Single Sign-On
   const handleGoogleLogin = async () => {
     setIsSubmitting(true);
     try {
@@ -81,7 +81,7 @@ export default function LoginModal() {
                 let authenticatedUser = payload;
                 try {
                   const res = await authService.loginWithGoogle(payload);
-                  const serverUser = res?.id ? res : (res?.data?.data || res?.data);
+                  const serverUser = Array.isArray(res) ? res[0] : (res?.data?.data || res?.data || res);
                   if (serverUser && serverUser.id) {
                     authenticatedUser = serverUser;
                   }
@@ -89,40 +89,37 @@ export default function LoginModal() {
                   console.warn("Backend auth sync skipped, fallback to client session:", backendErr);
                 }
 
-                // SECURITY: Store session-scoped token in sessionStorage (NEVER in persistent localStorage)
                 const token = tokenResponse.access_token || ('say_tok_' + Date.now());
                 sessionStorage.setItem('say_session_token', token);
                 try {
                   localStorage.removeItem('say_token');
                 } catch {}
 
-                const guaranteedId = (authenticatedUser.id && authenticatedUser.id.length === 36 && authenticatedUser.id.includes('-'))
+                const guaranteedId = (authenticatedUser.id && authenticatedUser.id.length === 36 && !String(authenticatedUser.id).startsWith('a0000000-'))
                   ? authenticatedUser.id
-                  : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0000000-0000-0000-0000-000000000001');
+                  : null;
                 const resolvedUser = {
                   ...authenticatedUser,
                   id: guaranteedId,
                   token,
                 };
 
-                // Check if this user has already completed one-time username setup
                 const userKey = googleProfile.email || guaranteedId;
                 const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
                 const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
                 const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
 
                 if (isSetupDone && savedHandle) {
-                  // User already configured username previously: log in seamlessly without prompting!
                   const safeUser = {
                     id: guaranteedId,
                     displayName: savedDisplayName || authenticatedUser.displayName || 'Audiophile',
                     handle: savedHandle,
-                    avatarUrl: authenticatedUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-                    audiophileRank: authenticatedUser.audiophileRank || "Vinyl Connoisseur",
+                    avatarUrl: authenticatedUser.avatarUrl || null,
+                    audiophileRank: authenticatedUser.audiophileRank || "Novice Listener",
                     bio: authenticatedUser.bio || "Curating timeless records on SAY.",
-                    streakDays: authenticatedUser.streakDays || 14,
-                    bestStreakDays: authenticatedUser.bestStreakDays || 28,
-                    notesCount: authenticatedUser.notesCount || 3,
+                    streakDays: authenticatedUser.streakDays || 1,
+                    bestStreakDays: authenticatedUser.bestStreakDays || 1,
+                    notesCount: authenticatedUser.notesCount || 0,
                   };
                   setUser(safeUser);
                   toast.success(`Welcome back, ${safeUser.displayName}!`);
@@ -131,7 +128,6 @@ export default function LoginModal() {
                   return;
                 }
 
-                // First-time user only: show one-time profile & username setup modal
                 const initialDisplayName = authenticatedUser.displayName || 'Audiophile';
                 const initialUsername = initialDisplayName
                   .normalize('NFD')
@@ -141,7 +137,7 @@ export default function LoginModal() {
 
                 setTempUser(resolvedUser);
                 setCustomDisplayName(initialDisplayName);
-                setCustomUsername(initialUsername || 'Listener');
+                setCustomUsername(initialUsername || '');
                 setShowProfileModal(true);
               } catch (err) {
                 toast.error("Unable to update profile. Please try again.");
@@ -154,29 +150,29 @@ export default function LoginModal() {
         return;
       }
 
-      // Seamless simulated authentication
+      // Safe development fallback session (Zero personal credentials leaked)
+      const devEmail = import.meta.env.VITE_DEV_USER_EMAIL || "listener@say.local";
       const payload = {
-        email: "audiophile.wanderer@gmail.com",
-        displayName: "Sonic Wanderer 🎧",
-        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-        idToken: "google-token-" + Date.now(),
+        email: devEmail,
+        displayName: "Audiophile",
+        avatarUrl: null,
+        idToken: "say-token-" + Date.now(),
       };
 
       let userResult = {
-        id: "a0000000-0000-0000-0000-000000000001",
+        displayName: "Audiophile",
+        handle: "@listener",
         ...payload,
-        bio: "Living between analog vinyl crackles and ethereal ambient waves.",
-        audiophileRank: "Vinyl Connoisseur",
       };
 
       try {
         const res = await authService.loginWithGoogle(payload);
-        const serverUser = res?.id ? res : (res?.data?.data || res?.data);
+        const serverUser = Array.isArray(res) ? res[0] : (res?.data?.data || res?.data || res);
         if (serverUser && serverUser.id) {
-          userResult = serverUser;
+          userResult = { ...userResult, ...serverUser };
         }
       } catch (err) {
-        console.warn("Backend auth unavailable, active in local session:", err);
+        console.warn("Backend auth session notice:", err);
       }
 
       sessionStorage.setItem('say_session_token', payload.idToken);
@@ -184,7 +180,6 @@ export default function LoginModal() {
         localStorage.removeItem('say_token');
       } catch {}
 
-      // Check if simulated user has already completed one-time username setup
       const userKey = payload.email || userResult.id;
       const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
       const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
@@ -193,7 +188,7 @@ export default function LoginModal() {
       if (isSetupDone && savedHandle) {
         const safeUser = {
           ...userResult,
-          displayName: savedDisplayName || userResult.displayName || "Sonic Wanderer 🎧",
+          displayName: savedDisplayName || userResult.displayName || "Audiophile",
           handle: savedHandle,
         };
         setUser(safeUser);
@@ -203,47 +198,13 @@ export default function LoginModal() {
         return;
       }
 
-      // First-time user only: show username setup
       setTempUser(userResult);
-      setCustomDisplayName("Sonic Wanderer 🎧");
-      setCustomUsername("SonicWanderer");
+      setCustomDisplayName(userResult.displayName || "Audiophile");
+      setCustomUsername(userResult.username || "audiophile");
       setShowProfileModal(true);
     } catch (err) {
-      console.warn("Backend auth unavailable, active in local session:", err);
-      const fallbackUser = {
-        id: "a0000000-0000-0000-0000-000000000001",
-        displayName: "Sonic Wanderer 🎧",
-        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-        bio: "Living between analog vinyl crackles and ethereal ambient waves.",
-        audiophileRank: "Vinyl Connoisseur",
-      };
-      sessionStorage.setItem('say_session_token', 'local_tok_' + Date.now());
-      try {
-        localStorage.removeItem('say_token');
-      } catch {}
-
-      const userKey = "audiophile.wanderer@gmail.com";
-      const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
-      const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
-      const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
-
-      if (isSetupDone && savedHandle) {
-        const safeUser = {
-          ...fallbackUser,
-          displayName: savedDisplayName || fallbackUser.displayName,
-          handle: savedHandle,
-        };
-        setUser(safeUser);
-        toast.success(`Welcome back, ${safeUser.displayName}!`);
-        handleClose();
-        navigate('/feed');
-        return;
-      }
-
-      setTempUser(fallbackUser);
-      setCustomDisplayName("Sonic Wanderer 🎧");
-      setCustomUsername("SonicWanderer");
-      setShowProfileModal(true);
+      console.warn("Sign in session notice:", err);
+      toast.error("Sign in failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -254,11 +215,11 @@ export default function LoginModal() {
     e.preventDefault();
     const finalDisplayName = customDisplayName.trim() || tempUser.displayName || 'Audiophile';
     // Preserve uppercase letters in username, strictly no emojis or invalid chars
-    const cleanUsername = customUsername.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'Listener';
+    const cleanUsername = customUsername.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'listener';
     const formattedHandle = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
-    const userId = (tempUser.id && tempUser.id.length === 36 && tempUser.id.includes('-'))
+    const userId = (tempUser.id && tempUser.id.length === 36 && tempUser.id.includes('-') && !String(tempUser.id).startsWith('a0000000-'))
       ? tempUser.id
-      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'a0000000-0000-0000-0000-000000000001');
+      : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now());
 
     // Security: Only store session token in sessionStorage, never in localStorage
     if (tempUser.token) {
@@ -273,12 +234,12 @@ export default function LoginModal() {
       id: userId,
       displayName: finalDisplayName, // Rich nickname with emojis & accents (Locket style)
       handle: formattedHandle, // Unique @username with preserved casing
-      avatarUrl: tempUser.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80",
-      audiophileRank: tempUser.audiophileRank || "Vinyl Connoisseur",
+      avatarUrl: tempUser.avatarUrl || null,
+      audiophileRank: tempUser.audiophileRank || "Novice Listener",
       bio: tempUser.bio || "Curating timeless records on SAY.",
-      streakDays: tempUser.streakDays || 14,
-      bestStreakDays: tempUser.bestStreakDays || 28,
-      notesCount: tempUser.notesCount || 3,
+      streakDays: tempUser.streakDays || 1,
+      bestStreakDays: tempUser.bestStreakDays || 1,
+      notesCount: tempUser.notesCount || 0,
     };
 
     // Mark one-time setup as completed permanently for this user
@@ -346,7 +307,7 @@ export default function LoginModal() {
 
               {/* Subtitle */}
               <p className="text-xs text-[#91B9C5]/80 max-w-[300px] leading-relaxed mb-8 font-sans">
-                Đăng nhập vào nhật ký âm nhạc của bạn. Không lưu trữ mật khẩu, hoàn toàn bảo mật.
+                Sign in to your musical journal. Zero passwords stored, completely secure.
               </p>
 
               {/* Action 1: Continue with Google Button */}
@@ -374,38 +335,12 @@ export default function LoginModal() {
                     d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.35 0 3.27 2.59 1.25 6.57l4.03 3.14c.95-2.83 3.6-4.96 6.72-4.96z"
                   />
                 </svg>
-                <span>Tiếp tục với Google</span>
-              </button>
-
-              {/* Divider with OR */}
-              <div className="relative w-full flex items-center justify-center my-6">
-                <div className="w-full border-t border-[#183952]/70" />
-                <span className="absolute bg-[#091827] px-3 font-mono text-[10px] uppercase tracking-widest text-[#91B9C5]/50">
-                  HOẶC
-                </span>
-              </div>
-
-              {/* Action 2: Explore as guest listener */}
-              <button
-                onClick={() => {
-                  sessionStorage.setItem('say_session_token', 'guest_tok_' + Date.now());
-                  try {
-                    localStorage.removeItem('say_token');
-                  } catch {}
-                  loginAsGuest();
-                  toast.info("Exploring as a Guest. Welcome to SAY!");
-                  handleClose();
-                  navigate('/feed');
-                }}
-                className="font-mono text-xs text-[#91B9C5]/80 hover:text-[#E8EEF0] underline underline-offset-8 transition-colors cursor-pointer flex items-center justify-center gap-1 group pb-2"
-              >
-                <span>Explore as guest</span>
-                <span className="inline-block transition-transform group-hover:translate-x-0.5">→</span>
+                <span>Continue with Google</span>
               </button>
             </>
           )}
 
-          {/* VIEW 2: CUSTOMIZE PROFILE (LOCKET-STYLE NICKNAME WITH EMOJIS + USERNAME) */}
+          {/* VIEW 2: CUSTOMIZE PROFILE (NICKNAME WITH EMOJIS + USERNAME) */}
           {!activePolicy && showProfileModal && (
             <form onSubmit={handleSaveProfile} className="w-full flex flex-col items-center">
               <div className="w-16 h-16 rounded-full overflow-hidden ring-4 ring-[#91B9C5]/30 mb-3 shadow-lg">
@@ -428,7 +363,7 @@ export default function LoginModal() {
                 Set up your display name and unique handle to connect with friends.
               </p>
 
-              {/* Field 1: Tên hiển thị (Display Name) - Allows emojis/icons from keyboard */}
+              {/* Field 1: Display Name - Allows emojis/icons from keyboard */}
               <div className="w-full mb-4 text-left">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-[#91B9C5]/90 tracking-wide">
@@ -442,7 +377,7 @@ export default function LoginModal() {
                   type="text"
                   value={customDisplayName}
                   onChange={(e) => setCustomDisplayName(e.target.value)}
-                  placeholder="e.g. Minh Quang 🎧"
+                  placeholder="e.g. Audiophile 🎧"
                   required
                   maxLength={40}
                   className="w-full bg-[#081724] border border-[#1b3e5a] rounded-xl px-3.5 py-2.5 text-sm text-[#E8EEF0] font-sans focus:outline-none focus:border-[#91B9C5] transition-colors"
@@ -452,7 +387,7 @@ export default function LoginModal() {
                 </span>
               </div>
 
-              {/* Field 2: Tên người dùng (@username) - Strictly letters, numbers, dot, underscore. NO emojis. */}
+              {/* Field 2: Username (@username) - Strictly letters, numbers, dot, underscore. NO emojis. */}
               <div className="w-full mb-6 text-left">
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-semibold text-[#91B9C5]/90 tracking-wide">
@@ -470,7 +405,7 @@ export default function LoginModal() {
                     type="text"
                     value={customUsername.replace(/^@/, '')}
                     onChange={(e) => handleUsernameChange(e.target.value)}
-                    placeholder="MinhQuang"
+                    placeholder="audiophile_01"
                     required
                     minLength={3}
                     maxLength={30}
@@ -483,7 +418,7 @@ export default function LoginModal() {
                   </span>
                 ) : (
                   <span className="text-[10px] text-[#91B9C5]/50 mt-1 block">
-                    Case-preserved (e.g. @MinhQuang). Strictly letters, numbers, '.' and '_'. No emojis or spaces.
+                    Case-preserved (e.g. @Audiophile). Strictly letters, numbers, '.' and '_'. No emojis or spaces.
                   </span>
                 )}
               </div>
@@ -568,30 +503,30 @@ export default function LoginModal() {
                     <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
                       <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
-                        1. Zero-Password Architecture
+                        1. Safe Passwordless Sign-In
                       </p>
                       <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
-                        Protected 100% via Google OAuth2. SAY does not maintain a password database table, completely eliminating password theft risks.
+                        Sign in instantly and securely with your verified account. SAY never asks for or stores your password, keeping your account completely protected.
                       </p>
                     </div>
 
                     <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
                       <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
-                        2. F12 Client-Side Email Anonymity
+                        2. Respect for Your Privacy
                       </p>
                       <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
-                        Your real email is verified privately on the server. On public feeds and DevTools inspection, other listeners only see your custom @handle and public profile.
+                        Your private email is never published. Other listeners only see your chosen display name, avatar, and musical reflections.
                       </p>
                     </div>
 
                     <div className="p-3 rounded-xl bg-[#081724] border border-[#183952]">
                       <p className="font-bold text-[#E8EEF0] mb-1 flex items-center gap-1.5">
                         <Lock className="w-3.5 h-3.5 text-[#91B9C5]" />
-                        3. Zero Third-Party Ad Trackers
+                        3. Pure Music Experience
                       </p>
                       <p className="text-[11px] leading-relaxed text-[#91B9C5]/80">
-                        SAY never installs ad tracking pixels or sells your musical taste to commercial data brokers.
+                        SAY is created for true music enthusiasts. We never sell your personal data or musical tastes to advertisers.
                       </p>
                     </div>
                   </div>

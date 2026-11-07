@@ -18,11 +18,21 @@ public class BackendApplication {
     }
 
     private static void loadDotEnv() {
-        File envFile = new File(".env");
-        if (!envFile.exists()) {
-            envFile = new File("../.env");
+        String[] possiblePaths = {
+            ".env",
+            "backend/.env",
+            "../.env",
+            "../backend/.env"
+        };
+        File envFile = null;
+        for (String path : possiblePaths) {
+            File f = new File(path);
+            if (f.exists() && f.isFile()) {
+                envFile = f;
+                break;
+            }
         }
-        if (envFile.exists()) {
+        if (envFile != null) {
             try {
                 List<String> lines = Files.readAllLines(envFile.toPath());
                 for (String line : lines) {
@@ -31,6 +41,9 @@ public class BackendApplication {
                         String[] parts = trimmed.split("=", 2);
                         String key = parts[0].trim();
                         String val = parts[1].trim();
+                        if ((val.startsWith("\"") && val.endsWith("\"")) || (val.startsWith("'") && val.endsWith("'"))) {
+                            val = val.substring(1, val.length() - 1);
+                        }
                         if (System.getProperty(key) == null && System.getenv(key) == null) {
                             System.setProperty(key, val);
                         }

@@ -43,6 +43,8 @@ export class ITunesAdapter {
     if (typeof window === 'undefined') return;
     this.audio = new Audio();
     this.audio.preload = 'auto';
+    this.audio.volume = this.service.volume ?? 0.85;
+    this.audio.muted = !!this.service.isMuted;
 
     this.audio.addEventListener('loadstart', () => {
       if (this.service.isStale(this.generationId)) return;
@@ -359,6 +361,14 @@ export class YouTubeAdapter {
               if (typeof this.player.setPlaybackQuality === 'function') {
                 this.player.setPlaybackQuality('small');
               }
+              if (typeof this.player.setVolume === 'function') {
+                this.player.setVolume(Math.round((this.service.volume ?? 0.85) * 100));
+                if (this.service.isMuted) {
+                  this.player.mute();
+                } else {
+                  this.player.unMute();
+                }
+              }
             } catch (_) {}
 
             resolve();
@@ -411,7 +421,7 @@ export class YouTubeAdapter {
         }
         break;
       case YT.PlayerState.ENDED:
-        if (this.loop || this.service.isLooping || this.service.isLooping !== false) {
+        if (this.service.isLooping) {
           try {
             this.isSeeking = true;
             this.targetSeekTime = this.snippetStart;
@@ -431,6 +441,7 @@ export class YouTubeAdapter {
           this.stopTicker();
           this.service.setCurrentTime(0);
           this.service.setState(PlaybackState.ENDED);
+          this.service.notifySnippetEnded(this.service.currentTrack);
         }
         break;
       default:
@@ -693,9 +704,18 @@ class MusicPlaybackService {
     this.isLooping = true;
     this.isManuallyPaused = true;
 
-    // Volume & Mute control (Default 0.85 audiophile level)
-    this.volume = 0.85;
-    this.isMuted = false;
+    // Volume & Mute control (Default 0.85 audiophile level, persisted in localStorage)
+    let savedVol = null;
+    let savedMuted = null;
+    try {
+      if (typeof window !== 'undefined') {
+        savedVol = localStorage.getItem('say_player_volume');
+        savedMuted = localStorage.getItem('say_player_muted');
+      }
+    } catch (_) {}
+
+    this.volume = savedVol !== null && !isNaN(Number(savedVol)) ? Math.max(0, Math.min(1, Number(savedVol))) : 0.85;
+    this.isMuted = savedMuted === 'true';
 
     // Providers
     this.itunesAdapter = new ITunesAdapter(this);
@@ -713,7 +733,18 @@ class MusicPlaybackService {
     this.volume = clamped;
     if (this.isMuted && clamped > 0) {
       this.isMuted = false;
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('say_player_muted', 'false');
+        }
+      } catch (_) {}
     }
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('say_player_volume', String(clamped));
+      }
+    } catch (_) {}
+
     if (this.itunesAdapter?.audio) {
       this.itunesAdapter.audio.volume = clamped;
       this.itunesAdapter.audio.muted = this.isMuted;
@@ -731,6 +762,12 @@ class MusicPlaybackService {
 
   toggleMute() {
     this.isMuted = !this.isMuted;
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('say_player_muted', String(this.isMuted));
+      }
+    } catch (_) {}
+
     if (this.itunesAdapter?.audio) {
       this.itunesAdapter.audio.muted = this.isMuted;
     }
@@ -924,8 +961,6 @@ class MusicPlaybackService {
 
     if (options.loop !== undefined) {
       this.setLooping(options.loop);
-    } else {
-      this.setLooping(true);
     }
 
     if (this.sourceType === SourceType.YOUTUBE) {

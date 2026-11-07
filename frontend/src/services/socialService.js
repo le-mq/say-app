@@ -16,4 +16,7 @@ export const socialService = {
   rejectFriendRequest: async (friendshipId, currentUserId) => {
     return api.put(`/social/request/${friendshipId}/reject?currentUserId=${currentUserId}`, {});
   },
+  removeFriend: async (friendshipId, currentUserId) => {
+    return api.delete(`/social/friends/${friendshipId}?currentUserId=${currentUserId}`);
+  },
 };

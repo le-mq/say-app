@@ -47,6 +47,19 @@
 html {
   scroll-behavior: smooth;
   scroll-snap-type: y proximity;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Allow text selection everywhere across the entire application for translation and copying */
+*, *::before, *::after {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+button {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 body {

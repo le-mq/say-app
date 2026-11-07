@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
 import { noteService } from '../services/noteService';
@@ -7,21 +8,26 @@ import MusicNoteCard from '../components/MusicNoteCard';
 import ReplyWithSongModal from '../components/ReplyWithSongModal';
 import { 
   Users, Radio, UserCheck, Plus, Search, Check, X, 
-  Disc, Play, Heart, Bookmark, MessageSquare, ExternalLink, 
+  Disc, Play, Pause, Heart, Bookmark, MessageSquare, ExternalLink, 
   UserPlus, UserMinus, Sparkles, AlertCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { formatTimeDetails } from '../utils/timeFormat';
 
 export default function Friends() {
   const { user } = useAuthStore();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Sub-tabs: 'feed' (Friends Feed) | 'hub' (Friendship Hub)
-  const [activeSubTab, setActiveSubTab] = useState('feed');
+  // Sub-tabs synchronized with Navbar / URL search params: 'feed' (Friends Feed) | 'hub' (Friendship Hub)
+  const activeSubTab = (searchParams.get('tab') || 'feed').toLowerCase();
+  const setActiveSubTab = (tab) => setSearchParams({ tab });
 
   // Friends Feed state
   const [friendsNotes, setFriendsNotes] = useState([]);
   const [isLoadingFeed, setIsLoadingFeed] = useState(true);
+  const [likedNoteIds, setLikedNoteIds] = useState(new Set());
+  const [likeCounts, setLikeCounts] = useState({});
 
   // Friendship Hub state
   const [friendsList, setFriendsList] = useState([]);
@@ -43,68 +49,15 @@ export default function Friends() {
     try {
       if (user?.id) {
         const res = await noteService.getFriendsFeed(user.id);
-        const notes = res?.data?.data || res?.data || [];
-        if (notes.length > 0) {
-          setFriendsNotes(notes);
-          setIsLoadingFeed(false);
-          return;
-        }
+        const notes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
+        setFriendsNotes(notes);
+        setIsLoadingFeed(false);
+        return;
       }
     } catch (err) {
-      console.warn('Backend friends feed offline, loading curated circle notes', err);
+      console.warn('Backend friends feed empty or offline', err);
     }
-
-    // Curated circle notes fallback (Public & Friends-only from connected circle)
-    const fallbackFriendsNotes = [
-      {
-        id: 'friend-note-1',
-        userDisplayName: 'Marcus Webb',
-        handle: '@marcusw',
-        userAvatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-        timeAgo: '2h ago',
-        songTitle: 'Alberto Balsalm Tape Dub',
-        artistName: 'Aphex Vibe',
-        songImageUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500',
-        externalSongUrl: 'https://audio-samples.github.io/samples/mp3/blizzard_biased/sample-1.mp3',
-        audioSnippetStart: 15,
-        audioSnippetEnd: 45,
-        templateType: 'CASSETTE',
-        emotionTag: '🌙 Nostalgic',
-        visibility: 'FRIENDS_ONLY',
-        lyricSnippet: 'Late night tea, rainy windows in Berlin.',
-        caption: 'Cleaning tape heads with isopropyl and savoring quiet.',
-        likesCount: 16,
-        dialogues: [
-          {
-            id: 'd1',
-            author: 'Linh Tran',
-            song: 'Subterranean Alien Echo',
-            caption: 'Pairs seamlessly with late night road thoughts.',
-          }
-        ],
-      },
-      {
-        id: 'friend-note-2',
-        userDisplayName: 'Elena Rostova',
-        handle: '@erostova',
-        userAvatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
-        timeAgo: '5h ago',
-        songTitle: 'Holocene Acoustic Chill',
-        artistName: 'Bon Iver Style',
-        songImageUrl: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=500',
-        externalSongUrl: 'https://audio-samples.github.io/samples/mp3/blizzard_biased/sample-2.mp3',
-        audioSnippetStart: 30,
-        audioSnippetEnd: 60,
-        templateType: 'STAMP',
-        emotionTag: '🍃 Peaceful',
-        visibility: 'PUBLIC',
-        lyricSnippet: 'And at once I knew I was not magnificent.',
-        caption: 'Fog rolling off the pines in Bergen. Cold acoustic air.',
-        likesCount: 22,
-        dialogues: [],
-      },
-    ];
-    setFriendsNotes(fallbackFriendsNotes);
+    setFriendsNotes([]);
     setIsLoadingFeed(false);
   };
 
@@ -117,50 +70,29 @@ export default function Friends() {
           socialService.getPendingRequests(user.id)
         ]);
 
-        if (friendsRes.status === 'fulfilled' && friendsRes.value?.data?.data) {
-          setFriendsList(friendsRes.value.data.data);
+        if (friendsRes.status === 'fulfilled') {
+          const data = friendsRes.value;
+          const list = Array.isArray(data) ? data : (data?.data?.data || data?.data || []);
+          setFriendsList(list);
+        } else {
+          setFriendsList([]);
         }
-        if (pendingRes.status === 'fulfilled' && pendingRes.value?.data?.data) {
-          setPendingRequests(pendingRes.value.data.data);
+
+        if (pendingRes.status === 'fulfilled') {
+          const data = pendingRes.value;
+          const list = Array.isArray(data) ? data : (data?.data?.data || data?.data || []);
+          setPendingRequests(list);
+        } else {
+          setPendingRequests([]);
         }
         return;
       }
     } catch (err) {
-      console.warn('Friendship hub load error, keeping default hub state', err);
+      console.warn('Friendship hub load error', err);
     }
 
-    // Default hub state
-    setFriendsList([
-      {
-        id: 'friend-user-1',
-        displayName: 'Marcus Webb',
-        handle: '@marcusw',
-        avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-        bio: 'Analog tape enthusiast & cassette dub archivist.',
-        audiophileRank: 'Tape Master',
-      },
-      {
-        id: 'friend-user-2',
-        displayName: 'Elena Rostova',
-        handle: '@erostova',
-        avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
-        bio: 'Field recorder and ambient synthesizer collector.',
-        audiophileRank: 'Ambient Specialist',
-      }
-    ]);
-
-    setPendingRequests([
-      {
-        id: 'req-1',
-        requester: {
-          id: 'user-req-1',
-          displayName: 'Julian Vance',
-          handle: '@julianv',
-          avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
-          audiophileRank: 'Vinyl Archivist',
-        }
-      }
-    ]);
+    setFriendsList([]);
+    setPendingRequests([]);
   };
 
   useEffect(() => {
@@ -253,15 +185,26 @@ export default function Friends() {
     }
   };
 
-  const handleRemoveFriend = (friendId, name) => {
-    setFriendsList(prev => prev.filter(f => f.id !== friendId));
-    toast.info(`Removed ${name} from friends list.`);
+  const handleRemoveFriend = async (friend, name) => {
+    const friendId = friend.friendId || friend.id;
+    const friendshipId = friend.friendshipId || friend.id;
+    try {
+      if (user?.id && friendshipId) {
+        await socialService.removeFriend(friendshipId, user.id);
+      }
+      setFriendsList(prev => prev.filter(f => (f.friendId || f.id) !== friendId));
+      toast.info(`Removed ${name} from friends list.`);
+    } catch (err) {
+      console.warn('Backend remove friend error, updating locally', err);
+      setFriendsList(prev => prev.filter(f => (f.friendId || f.id) !== friendId));
+      toast.info(`Removed ${name} from friends list.`);
+    }
   };
 
   // Play audio toggle
   const handlePlayToggle = (note) => {
     if (!note) return;
-    if (currentTrack?.id === note.id && isPlaying) {
+    if (currentTrack?.id === note.id) {
       togglePlay();
       return;
     }
@@ -279,13 +222,36 @@ export default function Friends() {
     });
   };
 
+  // Like note toggle with actual count tracking
+  const handleLikeNote = (noteId, defaultLikes = 0) => {
+    setLikedNoteIds(prev => {
+      const next = new Set(prev);
+      const isCurrentlyLiked = next.has(noteId);
+      if (isCurrentlyLiked) {
+        next.delete(noteId);
+        toast.info('Removed like');
+      } else {
+        next.add(noteId);
+        toast.success('Liked music note!');
+      }
+      setLikeCounts(counts => {
+        const currentCount = counts[noteId] ?? defaultLikes;
+        return {
+          ...counts,
+          [noteId]: isCurrentlyLiked ? Math.max(0, currentCount - 1) : currentCount + 1,
+        };
+      });
+      return next;
+    });
+  };
+
   // Handler when a reply is successfully sent via ReplyWithSongModal
   const handleReplySuccess = (newReply) => {
     setFriendsNotes(prevNotes => prevNotes.map(n => {
       if (n.id === replyModalNote.id) {
         const updatedDialogues = [...(n.dialogues || []), {
           id: newReply.id || `reply-${Date.now()}`,
-          author: user?.displayName || 'Linh Tran',
+          author: user?.displayName || 'Audiophile',
           song: newReply.songTitle || newReply.song,
           artist: newReply.artistName || newReply.artist,
           caption: newReply.replyCaption || newReply.caption,
@@ -299,59 +265,8 @@ export default function Friends() {
   return (
     <div className="w-full min-h-screen bg-[#071523] text-[#E8EEF0] selection:bg-[#91B9C5] selection:text-[#071523] pb-28">
       
-      {/* 1. HEADER WITH SUB-TABS (Chapter 5.2 Wireframe) */}
-      <section className="relative w-full border-b border-[#122e47] bg-gradient-to-b from-[#0b2034] via-[#081827] to-[#071523] pt-8 pb-6 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold tracking-widest uppercase bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
-                ✦ Acoustic Circle
-              </span>
-              <span className="text-xs font-mono text-[#91B9C5]/70">
-                /friends
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#E8EEF0] tracking-wide">
-              Friends Space
-            </h1>
-            <p className="text-xs text-[#91B9C5]/80 mt-0.5">
-              Connect through music: listen to your friends' notes and reply with songs. (No DMs / Chat).
-            </p>
-          </div>
-
-          {/* Sub-Tabs Switcher: Friends Feed | Friendship Hub */}
-          <div className="flex items-center gap-1 bg-[#091e30] p-1 rounded-2xl border border-[#143552]">
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('feed')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
-                activeSubTab === 'feed'
-                  ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
-                  : 'text-[#91B9C5]/70 hover:text-[#E8EEF0]'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5" />
-              <span>Friends Feed</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveSubTab('hub')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold tracking-wide transition-all cursor-pointer ${
-                activeSubTab === 'hub'
-                  ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
-                  : 'text-[#91B9C5]/70 hover:text-[#E8EEF0]'
-              }`}
-            >
-              <UserCheck className="w-3.5 h-3.5" />
-              <span>Friendship Hub {pendingRequests.length > 0 && `(${pendingRequests.length})`}</span>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. SUB-TAB CONTENT */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* SUB-TAB CONTENT */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         {/* SUB-TAB A: FRIENDS FEED (Chapter 5.3) */}
         {activeSubTab === 'feed' && (
@@ -396,6 +311,9 @@ export default function Friends() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
                 {friendsNotes.map((note) => {
                   const isNotePlaying = currentTrack?.id === note.id && isPlaying;
+                  const timeInfo = formatTimeDetails(note.createdAt);
+                  const isLiked = likedNoteIds.has(note.id);
+                  const displayLikes = likeCounts[note.id] ?? (note.likesCount ?? note.likes ?? 0);
 
                   return (
                     <div
@@ -414,8 +332,11 @@ export default function Friends() {
                             <h4 className="text-xs font-bold text-[#E8EEF0]">
                               {note.userDisplayName}
                             </h4>
-                            <p className="text-[10px] text-[#91B9C5]/70 font-mono">
-                              {note.handle || '@friend'} · {note.timeAgo || 'recently'}
+                            <p className="text-[10px] text-[#91B9C5]/70 font-mono flex items-center gap-1.5">
+                              <span>{note.timeAgo || timeInfo.relative || 'recently'}</span>
+                              {timeInfo.time && !timeInfo.isToday && (
+                                <span className="text-[#91B9C5]/50">· {timeInfo.date}</span>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -429,17 +350,15 @@ export default function Friends() {
 
                       {/* Physical Card / Note Cover Display */}
                       <div className="relative rounded-2xl overflow-hidden border border-[#1e486e] bg-[#061421] p-3.5 flex items-center gap-4">
-                        <div className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#23537e] shrink-0 bg-[#081724]">
+                        {/* Song Cover Art (Clean, unobstructed view) */}
+                        <div className={`relative w-16 h-16 rounded-xl overflow-hidden border shrink-0 bg-[#081724] transition-all ${
+                          isNotePlaying ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-[0_0_14px_rgba(34,211,238,0.3)]' : 'border-[#23537e]'
+                        }`}>
                           <img
                             src={note.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150'}
                             alt={note.songTitle}
                             className="w-full h-full object-cover"
                           />
-                          {isNotePlaying && (
-                            <div className="absolute inset-0 bg-[#081724]/60 flex items-center justify-center">
-                              <Disc className="w-6 h-6 text-cyan-300 animate-spin" />
-                            </div>
-                          )}
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -468,7 +387,7 @@ export default function Friends() {
                           title={isNotePlaying ? 'Pause' : 'Play Snippet'}
                         >
                           {isNotePlaying ? (
-                            <Disc className="w-4 h-4 animate-spin" />
+                            <Pause className="w-4 h-4 fill-current" />
                           ) : (
                             <Play className="w-4 h-4 fill-current ml-0.5" />
                           )}
@@ -496,11 +415,14 @@ export default function Friends() {
                         <div className="flex items-center gap-1.5 text-xs text-[#91B9C5]">
                           <button
                             type="button"
-                            onClick={() => toast.success('Liked music note!')}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl hover:bg-[#122e47] hover:text-rose-300 transition-colors cursor-pointer"
+                            onClick={() => handleLikeNote(note.id, note.likesCount ?? note.likes ?? 0)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-colors cursor-pointer ${
+                              isLiked ? 'text-rose-400 bg-rose-950/40' : 'hover:bg-[#122e47] hover:text-rose-300'
+                            }`}
+                            title="Like Note"
                           >
-                            <Heart className="w-3.5 h-3.5 text-rose-400" />
-                            <span className="text-[11px]">{note.likesCount || 16}</span>
+                            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
+                            <span className="text-[11px] font-mono font-medium">{displayLikes}</span>
                           </button>
 
                           <button
@@ -784,7 +706,7 @@ export default function Friends() {
 
                         <button
                           type="button"
-                          onClick={() => handleRemoveFriend(friend.id, friend.displayName)}
+                          onClick={() => handleRemoveFriend(friend, friend.displayName)}
                           className="p-1.5 rounded-xl hover:bg-rose-950/40 text-[#91B9C5]/50 hover:text-rose-400 transition-colors cursor-pointer"
                           title="Unfriend"
                         >

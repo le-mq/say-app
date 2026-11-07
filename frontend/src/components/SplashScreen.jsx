@@ -27,31 +27,31 @@ class CosmicStardustParticle {
     const tierRoll = Math.random();
     if (tierRoll < 0.45) {
       this.tier = 0;
-      // High initial velocity for massive screen dispersion reach
-      const speed = 5.0 + Math.random() * 12.0;
-      this.vx = Math.cos(radialAngle) * speed * 2.4 + (Math.random() - 0.5) * 3.5;
-      this.vy = Math.sin(radialAngle) * speed * 1.6 - 1.2 - Math.random() * 4.5;
-      this.friction = 0.982; // Glides far across viewport
-      this.decay = 0.009 + Math.random() * 0.008;
-      this.size = 0.8 + Math.random() * 1.1;
+      // High initial velocity for massive 360° screen dispersion reach
+      const speed = 8.0 + Math.random() * 16.0;
+      this.vx = Math.cos(radialAngle) * speed * 3.2 + (Math.random() - 0.5) * 4.5;
+      this.vy = Math.sin(radialAngle) * speed * 2.2 - 1.5 - Math.random() * 5.0;
+      this.friction = 0.988; // Glides effortlessly to the edges of the screen
+      this.decay = 0.0055 + Math.random() * 0.005;
+      this.size = 0.9 + Math.random() * 1.3;
       this.negativeGravity = -0.05 - Math.random() * 0.04;
     } else if (tierRoll < 0.85) {
       this.tier = 1;
-      const speed = 2.2 + Math.random() * 6.0;
-      this.vx = Math.cos(radialAngle) * speed * 1.8 + (Math.random() - 0.5) * 2.8;
-      this.vy = Math.sin(radialAngle) * speed * 1.3 - 1.6 - Math.random() * 4.0;
-      this.friction = 0.976;
-      this.decay = 0.010 + Math.random() * 0.009;
-      this.size = 1.4 + Math.random() * 1.2;
+      const speed = 4.0 + Math.random() * 8.5;
+      this.vx = Math.cos(radialAngle) * speed * 2.2 + (Math.random() - 0.5) * 3.5;
+      this.vy = Math.sin(radialAngle) * speed * 1.6 - 1.8 - Math.random() * 4.2;
+      this.friction = 0.982;
+      this.decay = 0.0065 + Math.random() * 0.006;
+      this.size = 1.5 + Math.random() * 1.3;
       this.negativeGravity = -0.09 - Math.random() * 0.06;
     } else {
       this.tier = 2;
-      const speed = 1.0 + Math.random() * 3.2;
-      this.vx = Math.cos(radialAngle) * speed + (Math.random() - 0.5) * 2.0;
-      this.vy = Math.sin(radialAngle) * speed - 0.8 - Math.random() * 2.2;
-      this.friction = 0.965;
-      this.decay = 0.008 + Math.random() * 0.007;
-      this.size = 2.2 + Math.random() * 1.5;
+      const speed = 1.6 + Math.random() * 4.5;
+      this.vx = Math.cos(radialAngle) * speed * 1.2 + (Math.random() - 0.5) * 2.2;
+      this.vy = Math.sin(radialAngle) * speed - 0.9 - Math.random() * 2.4;
+      this.friction = 0.975;
+      this.decay = 0.006 + Math.random() * 0.005;
+      this.size = 2.4 + Math.random() * 1.6;
       this.negativeGravity = -0.04 - Math.random() * 0.03;
     }
 
@@ -161,26 +161,26 @@ export default function SplashScreen({ onComplete }) {
       return;
     }
 
-    // 0.4s: Expand "SAY" into "Sound Around You" and reveal tagline
+    // 0.35s: Smooth, fluid letter expansion
     const t1 = setTimeout(() => {
       setStage(1);
-    }, 400);
+    }, 350);
 
-    // 1.8s: Text stays clearly visible for ~1.4s (vừa vặn, đọc kịp nhưng không bị chờ lâu)
-    // then dissolves into an expansive cosmic particle supernova
+    // 2.2s: Text stays comfortably visible for ~1.85s
+    // then explodes into an expansive 360° cosmic supernova
     const t2 = setTimeout(() => {
       setStage(2);
-    }, 1800);
+    }, 2200);
 
-    // 2.9s: Glassmorphism backdrop smoothly fades to reveal the pre-rendered Main Feed
+    // 3.6s: Glassmorphism backdrop smoothly dissolves after particles envelop the screen
     const t3 = setTimeout(() => {
       setIsFadingOut(true);
-    }, 2900);
+    }, 3600);
 
-    // 3.5s: Complete sequence, set session flag and unmount
+    // 4.2s: Complete sequence and unmount seamlessly
     const t4 = setTimeout(() => {
       finishSplash();
-    }, 3500);
+    }, 4200);
 
     return () => {
       clearTimeout(t1);
@@ -257,10 +257,10 @@ export default function SplashScreen({ onComplete }) {
     }
 
     // 3. Add ambient stellar stardust particles surrounding the text cluster
-    const ambientCount = isMobile ? 120 : 220;
+    const ambientCount = isMobile ? 260 : 480;
     for (let i = 0; i < ambientCount; i++) {
-      const rx = viewW / 2 + (Math.random() - 0.5) * (isMobile ? 320 : 620);
-      const ry = textY + (Math.random() - 0.5) * (isMobile ? 80 : 130);
+      const rx = viewW / 2 + (Math.random() - 0.5) * (isMobile ? 380 : 800);
+      const ry = textY + (Math.random() - 0.5) * (isMobile ? 120 : 200);
       particles.push(new CosmicStardustParticle(rx, ry, viewW, viewH));
     }
 
@@ -313,103 +313,75 @@ export default function SplashScreen({ onComplete }) {
         className="absolute inset-0 pointer-events-none flex items-center justify-center transition-opacity duration-700"
         style={{ opacity: isFadingOut ? 0 : 0.85 }}
       >
-        <div className="w-[620px] h-[620px] rounded-full bg-gradient-to-tr from-[#142C40]/55 via-[#91B9C5]/15 to-[#B39DDB]/18 filter blur-[120px]" />
+        <div className="w-[620px] h-[620px] rounded-full bg-gradient-to-tr from-[#142C40]/55 via-[#91B9C5]/18 to-[#B39DDB]/30 filter blur-[100px]" />
       </div>
 
       {/* ========================================================================= */}
-      {/* STAGES 0 & 1: DOM MOTION TEXT ([0.0s - 2.9s]) */}
+      {/* STAGES 0 & 1: DOM MOTION TEXT ([0.0s - 1.25s]) */}
       {/* ========================================================================= */}
       {stage < 2 && (
         <div
           className="relative flex flex-col items-center text-center px-4 will-change-transform"
           style={{
-            transform: hasMounted ? 'translateY(0px)' : 'translateY(35px)',
+            transform: hasMounted ? 'translateY(0px)' : 'translateY(24px)',
             opacity: hasMounted ? 1 : 0,
-            transition: 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.2), opacity 0.45s ease-out',
+            transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease-out',
           }}
         >
-          {/* Main Phrase: S[ound] A[round] Y[ou] */}
+          {/* Main Phrase: S[ound] A[round] Y[ou] - Anchored Letters with Butter-Smooth Extension */}
           <div className="flex items-baseline justify-center font-serif tracking-normal select-none">
             
-            {/* "S" + "ound" */}
-            <div
-              className="flex items-baseline will-change-transform"
-              style={{
-                transform: stage === 0 ? 'translateX(18px)' : 'translateX(0px)',
-                transition: 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
+            {/* Word 1: "S" + "ound" */}
+            <div className="flex items-baseline">
               <span className="text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] drop-shadow-[0_2px_22px_rgba(145,185,197,0.4)]">
                 S
               </span>
               <span
-                className={`inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] ${
-                  stage >= 1
-                    ? 'max-w-[180px] opacity-100 filter blur-0'
-                    : 'max-w-0 opacity-0 filter blur-[8px]'
-                }`}
+                className="inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] will-change-[max-width,opacity]"
                 style={{
-                  transition: 'max-width 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out, filter 0.6s ease-out',
+                  maxWidth: stage >= 1 ? '220px' : '0px',
+                  opacity: stage >= 1 ? 1 : 0,
+                  transition: 'max-width 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s ease-out',
                 }}
               >
                 ound
               </span>
             </div>
 
-            {/* Gap between S and A */}
-            <div
-              style={{
-                width: stage === 0 ? '4px' : '18px',
-                transition: 'width 0.65s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            />
+            {/* Stable constant gap - No reflow jump */}
+            <span className="inline-block w-2.5 sm:w-3.5 md:w-4.5" />
 
-            {/* "A" + "round" */}
+            {/* Word 2: "A" + "round" */}
             <div className="flex items-baseline">
               <span className="text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] drop-shadow-[0_2px_22px_rgba(145,185,197,0.4)]">
                 A
               </span>
               <span
-                className={`inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] ${
-                  stage >= 1
-                    ? 'max-w-[200px] opacity-100 filter blur-0'
-                    : 'max-w-0 opacity-0 filter blur-[8px]'
-                }`}
+                className="inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] will-change-[max-width,opacity]"
                 style={{
-                  transition: 'max-width 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out, filter 0.6s ease-out',
+                  maxWidth: stage >= 1 ? '240px' : '0px',
+                  opacity: stage >= 1 ? 1 : 0,
+                  transition: 'max-width 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s ease-out',
                 }}
               >
                 round
               </span>
             </div>
 
-            {/* Gap between A and Y */}
-            <div
-              style={{
-                width: stage === 0 ? '4px' : '18px',
-                transition: 'width 0.65s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            />
+            {/* Stable constant gap - No reflow jump */}
+            <span className="inline-block w-2.5 sm:w-3.5 md:w-4.5" />
 
-            {/* "Y" + "ou" */}
-            <div
-              className="flex items-baseline will-change-transform"
-              style={{
-                transform: stage === 0 ? 'translateX(-18px)' : 'translateX(0px)',
-                transition: 'transform 0.65s cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            >
+            {/* Word 3: "Y" + "ou" */}
+            <div className="flex items-baseline">
               <span className="text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] drop-shadow-[0_2px_22px_rgba(145,185,197,0.4)]">
                 Y
               </span>
               <span
-                className={`inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] ${
-                  stage >= 1
-                    ? 'max-w-[130px] opacity-100 filter blur-0'
-                    : 'max-w-0 opacity-0 filter blur-[8px]'
-                }`}
+                className="inline-block overflow-hidden whitespace-nowrap text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] will-change-[max-width,opacity]"
                 style={{
-                  transition: 'max-width 0.65s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.6s ease-out, filter 0.6s ease-out',
+                  maxWidth: stage >= 1 ? '160px' : '0px',
+                  opacity: stage >= 1 ? 1 : 0,
+                  transition: 'max-width 0.85s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.65s ease-out',
                 }}
               >
                 ou
@@ -418,12 +390,12 @@ export default function SplashScreen({ onComplete }) {
 
           </div>
 
-          {/* Tagline: "SAY IT WITHOUT SAYING IT" */}
+          {/* Tagline: "SAY IT WITHOUT SAYING IT" with Cosmic Lavender Accent */}
           <div
-            className={`mt-4 sm:mt-5 transition-all duration-600 ease-out ${
+            className={`mt-4 sm:mt-5 transition-all duration-400 ease-out ${
               stage >= 1
-                ? 'opacity-90 translate-y-0 filter blur-0'
-                : 'opacity-0 translate-y-3 filter blur-[5px]'
+                ? 'opacity-90 translate-y-0'
+                : 'opacity-0 translate-y-2'
             }`}
           >
             <span className="font-grotesk text-[10px] sm:text-xs font-semibold tracking-[0.26em] text-[#B39DDB] uppercase drop-shadow-[0_0_12px_rgba(179,157,219,0.5)]">

@@ -3,14 +3,14 @@ import { usePlayerStore } from '../store/playerStore';
 import { PlaybackState, SourceType } from '../services/MusicPlaybackService';
 import { 
   Play, Pause, SkipBack, SkipForward, ChevronUp, ChevronDown, 
-  X, Volume2, Volume1, VolumeX, AlertCircle, RefreshCw, Radio, Music 
+  X, Volume2, Volume1, VolumeX, AlertCircle, RefreshCw, Radio, Music, Disc 
 } from 'lucide-react';
 
 const DEFAULT_TRACK = {
   id: 'say-idle-track',
   songTitle: 'Select a Note to Listen',
   artistName: 'SAY Ambient Feed',
-  songImageUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300',
+  songImageUrl: null,
   audioSnippetStart: 0,
   snippetDuration: 30,
 };
@@ -110,18 +110,22 @@ export default function GlobalPlayerDock() {
 
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
           
-          {/* --- LEFT: Artwork + Title + Artist / Source --- */}
+          {/* --- 1. LEFT: Artwork + Title + Artist / Source --- */}
           <div 
-            className="flex items-center gap-3 min-w-0 max-w-[40%] sm:max-w-[32%] cursor-pointer group"
+            className="flex items-center gap-3 min-w-0 w-[30%] sm:w-[28%] cursor-pointer group shrink-0"
             onClick={() => setIsExpanded(!isExpanded)}
             title="Click to expand player"
           >
-            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-black shrink-0 border border-[#1b3d5b] shadow-md group-hover:border-[#91B9C5] transition-colors">
-              <img
-                src={track.songImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200'}
-                alt={track.songTitle}
-                className={`w-full h-full object-cover transition-opacity ${isPlaying ? 'opacity-95' : 'opacity-80'}`}
-              />
+            <div className="relative w-10 h-10 sm:w-11 sm:h-11 rounded-lg overflow-hidden bg-[#0c1f2e] shrink-0 border border-[#1b3d5b] flex items-center justify-center shadow-md group-hover:border-[#91B9C5] transition-colors">
+              {track.songImageUrl ? (
+                <img
+                  src={track.songImageUrl}
+                  alt={track.songTitle}
+                  className={`w-full h-full object-cover transition-opacity ${isPlaying ? 'opacity-95' : 'opacity-80'}`}
+                />
+              ) : (
+                <Disc className="w-5 h-5 text-[#91B9C5]/35 animate-pulse" />
+              )}
               {isBuffering && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                   <RefreshCw className="w-4 h-4 text-cyan-300 animate-spin" />
@@ -129,7 +133,7 @@ export default function GlobalPlayerDock() {
               )}
             </div>
 
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="font-bold text-xs sm:text-sm text-[#E8EEF0] truncate leading-tight group-hover:text-cyan-300 transition-colors">
                 {track.songTitle}
               </p>
@@ -141,62 +145,50 @@ export default function GlobalPlayerDock() {
             </div>
           </div>
 
-          {/* --- CENTER / RIGHT CONTROLS: Prev - Play/Pause - Next - Time - Volume --- */}
-          <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
-            
-            {/* Desktop Prev / Next */}
-            <div className="hidden sm:flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handlePrev}
-                className="p-1.5 text-[#91B9C5]/70 hover:text-white transition-colors cursor-pointer"
-                title="Restart snippet"
-              >
-                <SkipBack className="w-4 h-4" />
-              </button>
+          {/* --- 2. CENTER: Playback Controls ONLY (Prev - Play/Pause - Next) --- */}
+          <div className="flex items-center justify-center gap-2.5 sm:gap-4 flex-1 min-w-0">
+            {/* Desktop Prev Button */}
+            <button
+              type="button"
+              onClick={handlePrev}
+              className="p-1.5 text-[#91B9C5]/70 hover:text-white hover:scale-105 transition-all cursor-pointer shrink-0"
+              title="Restart snippet"
+            >
+              <SkipBack className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
 
-              <button
-                type="button"
-                onClick={togglePlay}
-                className="w-9 h-9 rounded-full bg-[#91B9C5] hover:bg-white text-[#081724] flex items-center justify-center transition-all hover:scale-105 shadow-md shadow-cyan-950/40 cursor-pointer"
-                title={isPlaying ? "Pause" : "Play Snippet"}
-              >
-                {isBuffering ? (
-                  <RefreshCw className="w-4 h-4 animate-spin text-[#081724]" />
-                ) : isPlaying ? (
-                  <Pause className="w-4 h-4 fill-current" />
-                ) : (
-                  <Play className="w-4 h-4 fill-current ml-0.5" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleNext}
-                className="p-1.5 text-[#91B9C5]/70 hover:text-white transition-colors cursor-pointer"
-                title="Skip to end"
-              >
-                <SkipForward className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Mobile Play Button */}
+            {/* Prominent Centered Primary Play/Pause Button */}
             <button
               type="button"
               onClick={togglePlay}
-              className="sm:hidden w-8 h-8 rounded-full bg-[#91B9C5] hover:bg-white text-[#081724] flex items-center justify-center transition-all shadow-md cursor-pointer"
-              title={isPlaying ? "Pause" : "Play"}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-tr from-[#91B9C5] to-[#B39DDB] hover:from-white hover:to-white text-[#081724] flex items-center justify-center transition-all hover:scale-105 shadow-lg shadow-violet-950/40 cursor-pointer shrink-0"
+              title={isPlaying ? "Pause" : "Play Snippet"}
             >
-              {isPlaying ? (
-                <Pause className="w-3.5 h-3.5 fill-current" />
+              {isBuffering ? (
+                <RefreshCw className="w-4.5 h-4.5 animate-spin text-[#081724]" />
+              ) : isPlaying ? (
+                <Pause className="w-4.5 h-4.5 fill-current" />
               ) : (
-                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                <Play className="w-4.5 h-4.5 fill-current ml-0.5" />
               )}
             </button>
 
-            {/* Thời gian thực tế của đoạn nhạc preview */}
-            <div className="text-[11px] font-mono text-[#91B9C5]/90 tracking-wider tabular-nums px-1">
-              <span>{formatTimeMMSS(displayCurrent)}</span>
+            {/* Desktop Next Button */}
+            <button
+              type="button"
+              onClick={handleNext}
+              className="p-1.5 text-[#91B9C5]/70 hover:text-white hover:scale-105 transition-all cursor-pointer shrink-0"
+              title="Skip to end"
+            >
+              <SkipForward className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+            </button>
+          </div>
+
+          {/* --- 3. RIGHT: Timer + Volume Control Slider & Expand Button --- */}
+          <div className="flex items-center justify-end gap-2.5 sm:gap-3.5 w-[30%] sm:w-[28%] shrink-0">
+            {/* Actual Preview Snippet Timer - Positioned next to volume slider */}
+            <div className="text-[11px] font-mono text-[#91B9C5]/90 tracking-wider tabular-nums px-1 shrink-0 hidden sm:inline-block">
+              <span className="text-[#E8EEF0]">{formatTimeMMSS(displayCurrent)}</span>
               <span className="text-neutral-500 mx-1">/</span>
               <span>{formatTimeMMSS(effectiveDuration)}</span>
             </div>
@@ -286,12 +278,19 @@ export default function GlobalPlayerDock() {
 
             {/* --- VISUAL STAGE: Pure Album Artwork & Vinyl Disc (Zero Video Overhead) --- */}
             <div className="w-full mb-5 flex items-center justify-center">
-              <div className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-2xl overflow-hidden bg-black border-2 border-[#1b3d5b] shadow-2xl group">
-                <img
-                  src={track.songImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500'}
-                  alt={track.songTitle}
-                  className={`w-full h-full object-cover transition-transform duration-700 ${isPlaying ? 'scale-105' : 'scale-100'}`}
-                />
+              <div className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-2xl overflow-hidden bg-[#0c1f2e] border-2 border-[#1b3d5b] shadow-2xl flex items-center justify-center group">
+                {track.songImageUrl ? (
+                  <img
+                    src={track.songImageUrl}
+                    alt={track.songTitle}
+                    className={`w-full h-full object-cover transition-transform duration-700 ${isPlaying ? 'scale-105' : 'scale-100'}`}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-3 text-[#91B9C5]/40">
+                    <Disc className="w-16 h-16 animate-[spin_10s_linear_infinite]" />
+                    <span className="text-[11px] font-mono tracking-wider uppercase">Select a Note</span>
+                  </div>
+                )}
                 {isBuffering && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <RefreshCw className="w-8 h-8 text-cyan-300 animate-spin" />

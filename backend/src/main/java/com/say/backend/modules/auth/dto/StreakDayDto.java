@@ -22,4 +22,5 @@ public class StreakDayDto {
     private String songImageUrl;
     private String templateType;
     private String emotionTag;
+    private int noteCount;
 }

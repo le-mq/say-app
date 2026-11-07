@@ -22,6 +22,9 @@ public class User {
     @Column(nullable = false, unique = true, length = 255)
     private String email;
 
+    @Column(unique = true, length = 50)
+    private String username;
+
     @Column(name = "display_name", nullable = false, length = 100)
     private String displayName;
 
