@@ -41,4 +41,12 @@ public class UserController {
         return userService.getUserByEmail(email)
                 .thenApply(response -> ResponseEntity.ok(ApiResponse.success(response)));
     }
+
+    @DeleteMapping("/{userId}")
+    public CompletableFuture<ResponseEntity<ApiResponse<Void>>> deleteUserAccount(
+            @PathVariable UUID userId
+    ) {
+        return userService.deleteUserAccount(userId)
+                .thenApply(res -> ResponseEntity.ok(ApiResponse.success("User account and all data deleted successfully", null)));
+    }
 }

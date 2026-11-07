@@ -51,6 +51,12 @@ public class StreakService implements IStreakService {
                             (existing, replacement) -> existing
                     ));
 
+            Map<Integer, Long> countsByDay = notes.stream()
+                    .collect(Collectors.groupingBy(
+                            n -> n.getCreatedAt().atZone(ZoneOffset.UTC).getDayOfMonth(),
+                            Collectors.counting()
+                    ));
+
             int daysInMonth = yearMonth.lengthOfMonth();
             List<StreakDayDto> streakDays = new ArrayList<>();
             int currentStreak = 0;
@@ -60,6 +66,7 @@ public class StreakService implements IStreakService {
                 LocalDate date = yearMonth.atDay(day);
                 Note note = notesByDay.get(day);
                 boolean hasNote = (note != null);
+                int noteCount = countsByDay.getOrDefault(day, 0L).intValue();
 
                 if (hasNote) {
                     currentStreak++;
@@ -74,6 +81,7 @@ public class StreakService implements IStreakService {
                         .dayOfMonth(day)
                         .date(date)
                         .hasNote(hasNote)
+                        .noteCount(noteCount)
                         .noteId(hasNote ? note.getId() : null)
                         .songTitle(hasNote ? note.getSongTitle() : null)
                         .artistName(hasNote ? note.getArtistName() : null)

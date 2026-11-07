@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Sparkles, Disc, Play, Shuffle, Calendar, Quote, Volume2 } from 'lucide-react';
+import { Sparkles, Radio, Play, Pause, Shuffle, Calendar, Quote, Volume2, Clock } from 'lucide-react';
+import { formatTimeDetails } from '../utils/timeFormat';
 
 /**
  * Memory Shuffle component (Chapter 6.5):
@@ -13,6 +14,7 @@ export default function MemoryShuffle({
   notes = [],
   lockedCapsuleIds = new Set(),
   activeNoteId = null,
+  isPlaying = false,
   onPlayNote,
   onSelectNote
 }) {
@@ -101,123 +103,117 @@ export default function MemoryShuffle({
     );
   }
 
-  const isPlaying = activeNoteId === currentNote.id;
-  const createdDate = new Date(currentNote.createdAt || Date.now());
-  const dateFormatted = createdDate.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
+  const isTrackPlaying = isPlaying && activeNoteId === currentNote.id;
+  const timeInfo = formatTimeDetails(currentNote.createdAt);
 
   return (
-    <div className="relative w-full rounded-3xl bg-gradient-to-br from-[#0c2338] via-[#091b2c] to-[#061421] border border-[#183d5f] p-5 sm:p-6 overflow-hidden shadow-xl select-none group">
-      {/* Background ambient vinyl watermark */}
-      <div className="absolute -right-8 -bottom-8 w-48 h-48 opacity-10 pointer-events-none text-[#91B9C5]">
-        <Disc className={`w-full h-full ${isPlaying ? 'animate-spin' : ''}`} />
+    <div className="relative w-full h-full rounded-3xl bg-gradient-to-br from-[#0c2338] via-[#091b2c] to-[#061421] border border-[#183d5f] p-5 sm:p-6 overflow-hidden shadow-xl select-text group flex flex-col justify-between">
+      {/* Background ambient memory wave watermark (Analog Radio Waves instead of oversized disc) */}
+      <div className="absolute -right-6 -bottom-6 w-44 h-44 opacity-[0.06] pointer-events-none text-cyan-300">
+        <Radio className={`w-full h-full ${isTrackPlaying ? 'animate-pulse' : ''}`} />
       </div>
 
-      {/* Top Banner: Memory Origin */}
+      {/* Top Banner: Perfectly Balanced Tag Header */}
       <div className="flex items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-[#133552] text-cyan-300 border border-cyan-500/30">
+        {/* Left: Origin & Time Badge in a single neat cluster */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-[#133552] text-cyan-300 border border-cyan-500/30 shrink-0">
             <Sparkles className="w-3 h-3 text-cyan-300" />
             {matchType === 'anniversary'
-              ? 'On This Day in the Past'
+              ? 'Past Anniversary'
               : matchType === 'day_match'
-              ? 'Past Day Echo'
-              : 'Echo from the Vault'}
+              ? 'Past Echo'
+              : 'Vault Echo'}
           </span>
-          <span className="text-[11px] font-mono text-[#91B9C5]/70 flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            {dateFormatted}
+          <span className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-mono font-semibold text-[#91B9C5]/90 bg-[#071726] px-2.5 py-1 rounded-full border border-[#14324c] shrink-0">
+            <Clock className="w-3 h-3 text-cyan-400" />
+            <span>{timeInfo.compact}</span>
           </span>
         </div>
 
-        {/* Shuffle Another Button */}
+        {/* Right: Shuffle Another Action */}
         {validNotes.length > 1 && (
           <button
             type="button"
             onClick={handleShuffleNext}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#091d30] hover:bg-[#102d4a] border border-[#173a5a] text-[11px] font-bold text-[#91B9C5] hover:text-[#E8EEF0] transition-all cursor-pointer active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0e273d] hover:bg-[#163a59] border border-[#1c456b] text-[11px] font-bold text-[#91B9C5] hover:text-[#E8EEF0] transition-all cursor-pointer active:scale-95 shrink-0"
             title="Discover another memory"
           >
-            <Shuffle className="w-3 h-3" />
-            <span>Shuffle Another</span>
+            <Shuffle className="w-3 h-3 text-cyan-400" />
+            <span>Shuffle</span>
           </button>
         )}
       </div>
 
-      {/* Main Memory Content Row */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
-        
-        {/* Vinyl Style Album Art */}
-        <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-[#204c75] shrink-0 shadow-lg group-hover:border-cyan-400/50 transition-colors bg-[#081724]">
-          <img
-            src={currentNote.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200'}
-            alt={currentNote.songTitle}
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200';
-            }}
-          />
-          {isPlaying && (
-            <div className="absolute inset-0 bg-[#081724]/60 backdrop-blur-xs flex items-center justify-center">
-              <Disc className="w-8 h-8 text-cyan-300 animate-spin" />
-            </div>
-          )}
-        </div>
-
-        {/* Note Metadata and Personal Caption */}
-        <div className="flex-1 min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <h4 className="font-bold text-sm sm:text-base text-[#E8EEF0] truncate">
-              {currentNote.songTitle}
-            </h4>
-            {currentNote.templateType && (
-              <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#102e49] text-cyan-200 border border-[#1b4870]">
-                {currentNote.templateType}
-              </span>
-            )}
+      {/* Main Memory Content Area */}
+      <div className="flex flex-col gap-4 my-auto">
+        <div className="flex items-center gap-4">
+          {/* Vinyl Style Album Art (Clean, unobstructed view with glowing ring when playing) */}
+          <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border shrink-0 shadow-lg transition-all bg-[#081724] ${
+            isTrackPlaying ? 'border-cyan-400 ring-2 ring-cyan-400/40 shadow-cyan-900/50' : 'border-[#204c75] group-hover:border-cyan-400/50'
+          }`}>
+            <img
+              src={currentNote.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200'}
+              alt={currentNote.songTitle}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200';
+              }}
+            />
           </div>
-          <p className="text-xs text-[#91B9C5] font-medium truncate">
-            {currentNote.artistName}
-          </p>
 
-          {(currentNote.caption || currentNote.lyricSnippet) && (
-            <div className="flex items-start gap-1.5 pt-1 text-xs text-[#E8EEF0]/90 italic font-serif">
-              <Quote className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
-              <p className="line-clamp-2">
-                {currentNote.caption || currentNote.lyricSnippet}
-              </p>
+          {/* Note Metadata */}
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className="flex items-center gap-2">
+              <h4 className="font-bold text-sm sm:text-base text-[#E8EEF0] truncate">
+                {currentNote.songTitle}
+              </h4>
+              {currentNote.templateType && (
+                <span className="text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-[#102e49] text-cyan-200 border border-[#1b4870]">
+                  {currentNote.templateType}
+                </span>
+              )}
             </div>
+            <p className="text-xs text-[#91B9C5] font-medium truncate">
+              {currentNote.artistName}
+            </p>
+          </div>
+        </div>
+
+        {/* Note Lyric / Caption */}
+        {(currentNote.caption || currentNote.lyricSnippet) && (
+          <div className="flex items-start gap-2 p-3 rounded-2xl bg-[#061523]/80 border border-[#14334f] text-xs text-[#E8EEF0]/90 italic font-serif">
+            <Quote className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+            <p className="line-clamp-3 leading-relaxed">
+              {currentNote.caption || currentNote.lyricSnippet}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom: Listen Again CTA */}
+      <div className="pt-4 border-t border-[#122c44] mt-2">
+        <button
+          type="button"
+          onClick={() => onPlayNote && onPlayNote(currentNote)}
+          className={`w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md cursor-pointer ${
+            isTrackPlaying
+              ? 'bg-cyan-400 text-[#081827] ring-4 ring-cyan-400/30'
+              : 'bg-gradient-to-r from-cyan-500 to-[#1e669b] hover:from-cyan-400 hover:to-[#257dbd] text-[#07131e] font-extrabold'
+          }`}
+        >
+          {isTrackPlaying ? (
+            <>
+              <Pause className="w-4 h-4 fill-current" />
+              <span>Pause Echo</span>
+            </>
+          ) : (
+            <>
+              <Play className="w-4 h-4 fill-current ml-0.5" />
+              <span>Listen Again</span>
+            </>
           )}
-        </div>
-
-        {/* Listen Again CTA */}
-        <div className="w-full sm:w-auto flex items-center justify-end pt-3 sm:pt-0 border-t sm:border-t-0 border-[#122c44] shrink-0">
-          <button
-            type="button"
-            onClick={() => onPlayNote && onPlayNote(currentNote)}
-            className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-bold transition-all shadow-md cursor-pointer ${
-              isPlaying
-                ? 'bg-cyan-400 text-[#081827] ring-4 ring-cyan-400/30'
-                : 'bg-gradient-to-r from-cyan-500 to-[#1e669b] hover:from-cyan-400 hover:to-[#257dbd] text-[#07131e] font-extrabold'
-            }`}
-          >
-            {isPlaying ? (
-              <>
-                <Volume2 className="w-4 h-4 animate-bounce" />
-                <span>Now Playing</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4 fill-current ml-0.5" />
-                <span>Listen Again</span>
-              </>
-            )}
-          </button>
-        </div>
-
+        </button>
       </div>
     </div>
   );

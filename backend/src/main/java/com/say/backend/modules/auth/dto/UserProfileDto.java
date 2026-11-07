@@ -15,6 +15,7 @@ import java.util.UUID;
 public class UserProfileDto {
     private UUID id;
     private String email;
+    private String username;
     private String displayName;
     private String avatarUrl;
     private String bio;

@@ -174,6 +174,32 @@ public class FriendshipService implements IFriendshipService {
         }
     }
 
+    @Override
+    @Async("taskExecutor")
+    @Transactional
+    public CompletableFuture<Void> removeFriend(UUID friendshipId, UUID currentUserId) {
+        try {
+            Friendship friendship = friendshipRepository.findById(friendshipId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Friendship not found with id: " + friendshipId));
+
+            boolean isParticipant = friendship.getRequester().getId().equals(currentUserId)
+                    || friendship.getAddressee().getId().equals(currentUserId);
+
+            if (!isParticipant) {
+                throw new BadRequestException("Unauthorized to remove this friendship");
+            }
+
+            friendshipRepository.delete(friendship);
+            log.info("Friendship {} successfully removed by user {}", friendshipId, currentUserId);
+            return CompletableFuture.completedFuture(null);
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error removing friendship {}: {}", friendshipId, e.getMessage());
+            throw new AppException("Failed to remove friend: " + e.getMessage());
+        }
+    }
+
     private FriendResponse mapToResponseDto(Friendship friendship) {
         return FriendResponse.builder()
                 .id(friendship.getId())

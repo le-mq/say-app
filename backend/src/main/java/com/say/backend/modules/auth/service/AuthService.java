@@ -1,6 +1,7 @@
 package com.say.backend.modules.auth.service;
 
 import com.say.backend.common.exception.AppException;
+import com.say.backend.common.exception.BadRequestException;
 import com.say.backend.common.exception.ResourceNotFoundException;
 import com.say.backend.modules.auth.dto.GoogleAuthRequest;
 import com.say.backend.modules.auth.dto.StreakCalendarDto;
@@ -19,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AuthService implements IAuthService {
 
+    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_.]{3,30}$");
     private final IUserRepository userRepository;
     private final INoteRepository noteRepository;
 
@@ -52,6 +55,20 @@ public class AuthService implements IAuthService {
         try {
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+            // Validate and enforce unique username
+            if (request.getUsername() != null && !request.getUsername().isBlank()) {
+                String cleanUsername = request.getUsername().trim().replaceFirst("^@", "").toLowerCase();
+                if (!USERNAME_PATTERN.matcher(cleanUsername).matches()) {
+                    throw new BadRequestException("Username must be 3-30 characters and contain only letters, numbers, dots, or underscores");
+                }
+                if (!cleanUsername.equalsIgnoreCase(user.getUsername())) {
+                    if (userRepository.existsByUsernameAndIdNot(cleanUsername, userId)) {
+                        throw new BadRequestException("Username '@" + cleanUsername + "' is already taken by another audiophile");
+                    }
+                    user.setUsername(cleanUsername);
+                }
+            }
 
             if (request.getDisplayName() != null && !request.getDisplayName().isBlank()) {
                 user.setDisplayName(request.getDisplayName());
@@ -136,6 +153,12 @@ public class AuthService implements IAuthService {
                             (existing, replacement) -> existing
                     ));
 
+            Map<Integer, Long> countsByDay = notes.stream()
+                    .collect(Collectors.groupingBy(
+                            n -> n.getCreatedAt().atZone(ZoneOffset.UTC).getDayOfMonth(),
+                            Collectors.counting()
+                    ));
+
             int daysInMonth = yearMonth.lengthOfMonth();
             List<StreakDayDto> streakDays = new ArrayList<>();
             int currentStreak = 0;
@@ -145,6 +168,7 @@ public class AuthService implements IAuthService {
                 LocalDate date = yearMonth.atDay(day);
                 Note note = notesByDay.get(day);
                 boolean hasNote = (note != null);
+                int noteCount = countsByDay.getOrDefault(day, 0L).intValue();
 
                 if (hasNote) {
                     currentStreak++;
@@ -159,6 +183,7 @@ public class AuthService implements IAuthService {
                         .dayOfMonth(day)
                         .date(date)
                         .hasNote(hasNote)
+                        .noteCount(noteCount)
                         .noteId(hasNote ? note.getId() : null)
                         .songTitle(hasNote ? note.getSongTitle() : null)
                         .artistName(hasNote ? note.getArtistName() : null)
@@ -190,6 +215,7 @@ public class AuthService implements IAuthService {
         return UserProfileDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
+                .username(user.getUsername())
                 .displayName(user.getDisplayName())
                 .avatarUrl(user.getAvatarUrl())
                 .bio(user.getBio())

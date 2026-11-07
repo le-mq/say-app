@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { 
   Play, Pause, Heart, Bookmark, MessageSquare, Plus, 
@@ -6,6 +6,7 @@ import {
   Waves, Music, Users, Headphones, CloudRain, Star, Radio, Moon
 } from 'lucide-react';
 import { formatTime } from '../services/musicService';
+import { formatTimeDetails } from '../utils/timeFormat';
 
 export default function MusicNoteCard({ 
   note, 
@@ -15,26 +16,21 @@ export default function MusicNoteCard({
   onReplyAdded, 
   compact = false 
 }) {
-  const [likes, setLikes] = useState(note.likesCount || 38);
+  const [likes, setLikes] = useState(note?.likesCount ?? note?.likes ?? 0);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replySongTitle, setReplySongTitle] = useState('');
   const [replyText, setReplyText] = useState('');
-  const [replies, setReplies] = useState(note.dialogues || [
-    {
-      id: 'd1',
-      author: 'Sora Tanaka',
-      song: 'Alberto Balsalm Tape Dub',
-      caption: 'Alberto Balsalm pairs seamlessly with this late night road reflection.',
-    },
-    {
-      id: 'd2',
-      author: 'Marcus Webb',
-      song: 'Holocene Acoustic Chill',
-      caption: 'This intro always gives me chills on dark highway stretches.',
-    },
-  ]);
+  const [replies, setReplies] = useState(note?.dialogues || []);
+
+  useEffect(() => {
+    setLikes(note?.likesCount ?? note?.likes ?? 0);
+    setReplies(note?.dialogues || []);
+  }, [note?.likesCount, note?.likes, note?.dialogues]);
+
+  const timeInfo = formatTimeDetails(note?.createdAt);
+  const formattedTimeAgo = note?.timeAgo || timeInfo.relative || "Just now";
 
   const handleLike = () => {
     setIsLiked(prev => !prev);
@@ -51,7 +47,7 @@ export default function MusicNoteCard({
     if (!replyText.trim()) return;
     const newDialogue = {
       id: 'd-' + Date.now(),
-      author: 'Linh Tran',
+      author: note.userDisplayName || 'Audiophile',
       song: replySongTitle.trim() || 'Midnight Wave Response',
       caption: replyText.trim(),
     };
@@ -64,7 +60,7 @@ export default function MusicNoteCard({
   };
 
   const template = (note.templateType || 'RECEIPTIFY').toUpperCase();
-  const userInitial = (note.userDisplayName || 'Linh Tran').charAt(0).toUpperCase();
+  const userInitial = (note.userDisplayName || 'Audiophile').charAt(0).toUpperCase();
 
   // Instant Card Click Playback (play snippet anywhere clicked on the card)
   const handleCardClick = (e) => {
@@ -123,8 +119,8 @@ export default function MusicNoteCard({
         </div>
       ),
       'Rain Drops': (
-        <div className="w-8 h-8 rounded-full bg-sky-950/90 border-2 border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)] flex items-center justify-center">
-          <CloudRain className="w-4 h-4 text-sky-400" />
+        <div className="w-8 h-8 rounded-full bg-[#121c2e]/90 border border-violet-400/60 shadow-[0_0_12px_rgba(179,157,219,0.35)] flex items-center justify-center">
+          <CloudRain className="w-4 h-4 text-violet-300" />
         </div>
       ),
       'Lo-Fi Cat': (
@@ -258,12 +254,12 @@ export default function MusicNoteCard({
   return (
     <article 
       onClick={handleCardClick}
-      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard ${
-        compact ? 'h-[360px] p-3' : 'min-h-[460px] sm:min-h-[480px]'
+      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e2233]/85 via-[#0a1c2b]/90 to-[#071522]/95 border border-white/[0.08] shadow-2xl ${
+        compact ? 'h-[360px] p-3' : 'h-[500px]'
       } ${
         isActive 
-          ? 'bg-gradient-to-b from-[#0e2233]/85 via-[#0a1c2b]/90 to-[#061421]/95 border border-cyan-400/25 shadow-[0_20px_60px_rgba(0,0,0,0.7),0_0_25px_rgba(34,211,238,0.08)]' 
-          : 'bg-gradient-to-b from-[#0e2233]/55 via-[#0a1c2b]/65 to-[#061421]/75 border border-white/[0.05] shadow-[0_12px_30px_rgba(0,0,0,0.4)]'
+          ? 'opacity-100' 
+          : 'opacity-70 hover:opacity-90'
       }`}
     >
       
@@ -283,8 +279,11 @@ export default function MusicNoteCard({
             <h4 className="text-xs font-bold text-[#E8EEF0] truncate leading-tight flex items-center gap-1">
               <span>{note.userDisplayName || "Audiophile"}</span>
             </h4>
-            <p className="text-[10px] font-mono text-[#91B9C5]/70 truncate">
-              {note.handle || "@listener"} · {note.timeAgo || "Just now"}
+            <p className="text-[10px] font-mono text-[#91B9C5]/70 truncate flex items-center gap-1">
+              <span>{formattedTimeAgo}</span>
+              {timeInfo.time && !timeInfo.isToday && (
+                <span className="text-[#91B9C5]/50">· {timeInfo.date}</span>
+              )}
             </p>
           </div>
         </div>
@@ -325,7 +324,7 @@ export default function MusicNoteCard({
                 <span className="truncate max-w-[130px]">
                   {note.orderNumber || (note.userDisplayName ? `ORD #${(note.id || '01').toString().slice(-4).toUpperCase()} FOR ${note.userDisplayName.toUpperCase()}` : "ORD ARCHIVE")}
                 </span>
-                <span className="shrink-0">{note.timeAgo || "10m ago"}</span>
+                <span className="shrink-0">{formattedTimeAgo}</span>
               </div>
 
               <div>
@@ -501,12 +500,12 @@ export default function MusicNoteCard({
 
         {/* TEMPLATE D: VINYL RECORD */}
         {template === 'VINYL' && (
-          <div className="relative w-full h-[225px] bg-[#091522] text-[#E8EEF0] p-3 rounded-2xl border-2 border-cyan-500/30 shadow-[0_12px_32px_rgba(0,0,0,0.7)] font-mono flex flex-col justify-between overflow-hidden">
+          <div className="relative w-full h-[225px] bg-[#071421]/80 text-[#E8EEF0] p-3 rounded-2xl border border-white/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.45)] font-mono flex flex-col justify-between overflow-hidden">
             {renderStickerSeal()}
 
-            <div className="flex justify-between items-center text-[8.5px] text-cyan-300 uppercase tracking-widest pb-0.5 border-b border-[#1b3d5c] pr-14">
+            <div className="flex justify-between items-center text-[8.5px] text-[#A59CB5] uppercase tracking-widest pb-0.5 border-b border-white/[0.08] pr-14">
               <span>ANALOG MICROGROOVE • 33 RPM</span>
-              <span className="text-cyan-400 font-bold">ANALOG</span>
+              <span className="text-[#B39DDB] font-bold">ANALOG</span>
             </div>
 
             <div className="flex items-center gap-3 my-1">
@@ -532,17 +531,17 @@ export default function MusicNoteCard({
                 <h3 className="font-extrabold text-[11px] text-[#E8EEF0] uppercase tracking-wider truncate">
                   {note.songTitle}
                 </h3>
-                <p className="text-[9.5px] text-[#91B9C5] truncate">
+                <p className="text-[9.5px] text-[#A59CB5] truncate">
                   {note.artistName}
                 </p>
-                <span className="text-[8px] text-cyan-400 font-mono mt-0.5 inline-block">
+                <span className="text-[8px] text-[#B39DDB]/90 font-mono mt-0.5 inline-block">
                   CLIP: {formatTime(note.audioSnippetStart || '0:10')} - {formatTime(note.audioSnippetEnd || '0:40')}
                 </span>
               </div>
             </div>
 
             {note.lyricSnippet && (
-              <div className="p-1.5 rounded-lg bg-[#07131e]/90 border border-[#16354d] border-l-3 border-l-cyan-400 text-[9.5px] font-serif italic text-cyan-100 leading-tight tracking-wide line-clamp-2 break-words">
+              <div className="p-1.5 rounded-lg bg-[#050e18]/80 border border-white/[0.06] border-l-3 border-l-[#B39DDB] text-[9.5px] font-serif italic text-purple-100 leading-tight tracking-wide line-clamp-2 break-words">
                 "{note.lyricSnippet}"
               </div>
             )}
@@ -552,8 +551,8 @@ export default function MusicNoteCard({
 
       {/* 3. PERSONAL CAPTION (Chapter 4.7) */}
       {note.caption && (
-        <div className="px-1 py-1 text-xs text-[#91B9C5] font-sans line-clamp-2 flex items-start gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+        <div className="px-1 py-1 text-xs text-[#A59CB5] font-sans line-clamp-2 flex items-start gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-[#B39DDB] shrink-0 mt-0.5" />
           <span className="italic">"{note.caption}"</span>
         </div>
       )}
@@ -566,13 +565,13 @@ export default function MusicNoteCard({
           <button
             type="button"
             onClick={handleLike}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-mono transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition-colors cursor-pointer ${
               isLiked ? 'text-rose-400 bg-rose-950/40' : 'text-[#A59CB5]/80 hover:text-white hover:bg-white/[0.05]'
             }`}
             title="Like Note"
           >
-            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current' : ''}`} />
-            <span className="text-[10px] text-neutral-400">{likes}</span>
+            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
+            <span className="text-[10px] text-neutral-300 font-bold">{likes}</span>
           </button>
 
           <button

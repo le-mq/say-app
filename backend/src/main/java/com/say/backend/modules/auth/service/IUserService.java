@@ -12,4 +12,6 @@ public interface IUserService {
     CompletableFuture<UserProfileResponse> updateUserProfile(UUID userId, UserProfileResponse request);
 
     CompletableFuture<UserProfileResponse> getUserByEmail(String email);
+
+    CompletableFuture<Void> deleteUserAccount(UUID userId);
 }

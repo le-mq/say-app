@@ -18,4 +18,6 @@ public interface IFriendshipService {
     CompletableFuture<List<FriendProfileDto>> getFriendsList(UUID userId);
 
     CompletableFuture<List<FriendResponse>> getPendingRequests(UUID userId);
+
+    CompletableFuture<Void> removeFriend(UUID friendshipId, UUID currentUserId);
 }

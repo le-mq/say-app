@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lock, Unlock, Sparkles, Clock, Calendar, Plus, Disc, Play, ShieldAlert, X, AlertTriangle } from 'lucide-react';
+import {
+  Lock, Unlock, Sparkles, Clock, Calendar, Plus, Disc, Play, Pause,
+  ShieldAlert, X, AlertTriangle, ChevronLeft, ChevronRight
+} from 'lucide-react';
 import { toast } from 'react-toastify';
 
 /**
@@ -21,7 +24,8 @@ function getCountdown(unlockAt) {
 export default function StardustCapsules({
   userId,
   onPlayNote,
-  activeNoteId = null
+  activeNoteId = null,
+  isPlaying = false
 }) {
   const [capsules, setCapsules] = useState([]);
   const [filter, setFilter] = useState('ALL'); // 'ALL' | 'SEALED' | 'UNLOCKED'
@@ -109,11 +113,18 @@ export default function StardustCapsules({
     });
   }, [capsules]);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 6;
+
   const filteredCapsules = useMemo(() => {
     if (filter === 'SEALED') return processedCapsules.filter((c) => c.isLocked);
     if (filter === 'UNLOCKED') return processedCapsules.filter((c) => !c.isLocked);
     return processedCapsules;
   }, [processedCapsules, filter]);
+
+  const totalPages = Math.ceil(filteredCapsules.length / PAGE_SIZE) || 1;
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedCapsules = filteredCapsules.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Create new Capsule
   const handleCreateCapsule = (e) => {
@@ -150,7 +161,7 @@ export default function StardustCapsules({
   };
 
   return (
-    <div className="w-full space-y-6 select-none">
+    <div className="w-full space-y-6 select-text">
       
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -173,7 +184,10 @@ export default function StardustCapsules({
               <button
                 key={tab}
                 type="button"
-                onClick={() => setFilter(tab)}
+                onClick={() => {
+                  setFilter(tab);
+                  setCurrentPage(1);
+                }}
                 className={`px-3 py-1 rounded-lg text-[10px] font-bold tracking-wider transition-all cursor-pointer ${
                   filter === tab
                     ? 'bg-[#184266] text-[#E8EEF0] shadow-sm'
@@ -207,8 +221,8 @@ export default function StardustCapsules({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredCapsules.map((cap) => {
-            const isPlaying = activeNoteId === cap.id;
+          {paginatedCapsules.map((cap) => {
+            const isTrackPlaying = isPlaying && activeNoteId === cap.id;
             const unlockDateStr = new Date(cap.unlockAt).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',
@@ -294,9 +308,11 @@ export default function StardustCapsules({
                   </span>
                 </div>
 
-                {/* Unlocked Song Info & Cover */}
+                {/* Unlocked Song Info & Cover (Clean, unobstructed view) */}
                 <div className="flex items-center gap-3 z-10 my-auto">
-                  <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-[#23537e] shrink-0 bg-[#081724]">
+                  <div className={`relative w-12 h-12 rounded-xl overflow-hidden border shrink-0 bg-[#081724] transition-all ${
+                    isTrackPlaying ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.3)]' : 'border-[#23537e]'
+                  }`}>
                     <img
                       src={cap.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120'}
                       alt={cap.songTitle}
@@ -305,11 +321,6 @@ export default function StardustCapsules({
                         e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120';
                       }}
                     />
-                    {isPlaying && (
-                      <div className="absolute inset-0 bg-[#081724]/70 flex items-center justify-center">
-                        <Disc className="w-5 h-5 text-cyan-300 animate-spin" />
-                      </div>
-                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <h5 className="font-bold text-xs text-[#E8EEF0] truncate">
@@ -335,15 +346,15 @@ export default function StardustCapsules({
                     type="button"
                     onClick={() => onPlayNote && onPlayNote(cap)}
                     className={`flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer ${
-                      isPlaying
+                      isTrackPlaying
                         ? 'bg-cyan-400 text-[#081827]'
                         : 'bg-[#153a59] hover:bg-[#1d4d75] text-[#E8EEF0] border border-[#23537e]'
                     }`}
                   >
-                    {isPlaying ? (
+                    {isTrackPlaying ? (
                       <>
-                        <Disc className="w-3 h-3 animate-spin" />
-                        <span>Playing</span>
+                        <Pause className="w-3 h-3 fill-current" />
+                        <span>Pause</span>
                       </>
                     ) : (
                       <>
@@ -356,6 +367,33 @@ export default function StardustCapsules({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-[#143552]">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0e273d] hover:bg-[#163a59] disabled:opacity-40 disabled:pointer-events-none text-xs font-bold text-[#E8EEF0] border border-[#1b4366] transition-all cursor-pointer shadow-sm"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>Previous</span>
+          </button>
+          <span className="text-xs font-mono font-bold text-[#91B9C5]">
+            Page {safePage} of {totalPages} ({filteredCapsules.length} total)
+          </span>
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#0e273d] hover:bg-[#163a59] disabled:opacity-40 disabled:pointer-events-none text-xs font-bold text-[#E8EEF0] border border-[#1b4366] transition-all cursor-pointer shadow-sm"
+          >
+            <span>Next</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       )}
 

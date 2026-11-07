@@ -127,7 +127,7 @@ export default function ReplyWithSongModal({
       const fallbackReply = {
         id: `reply-${Date.now()}`,
         parentNoteId: note.id,
-        author: user?.displayName || 'Linh Tran',
+        author: user?.displayName || 'Audiophile',
         song: selectedTrack.title,
         artist: selectedTrack.artist,
         songImageUrl: selectedTrack.coverUrl,

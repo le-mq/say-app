@@ -13,4 +13,7 @@ export const authService = {
   getStreakCalendar: async (userId, year = 2026, month = 11) => {
     return api.get(`/auth/streak/${userId}?year=${year}&month=${month}`);
   },
+  deleteAccount: async (userId) => {
+    return api.delete(`/users/${userId}`);
+  },
 };

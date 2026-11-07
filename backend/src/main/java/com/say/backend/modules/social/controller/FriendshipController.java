@@ -63,4 +63,13 @@ public class FriendshipController {
         return friendshipService.getPendingRequests(userId)
                 .thenApply(requests -> ResponseEntity.ok(ApiResponse.success("Pending requests retrieved successfully", requests)));
     }
+
+    @DeleteMapping("/friends/{friendshipId}")
+    public CompletableFuture<ResponseEntity<ApiResponse<Void>>> removeFriend(
+            @PathVariable UUID friendshipId,
+            @RequestParam UUID currentUserId
+    ) {
+        return friendshipService.removeFriend(friendshipId, currentUserId)
+                .thenApply(res -> ResponseEntity.ok(ApiResponse.success("Friend removed successfully", null)));
+    }
 }
