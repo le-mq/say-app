@@ -1,38 +1,41 @@
 import React from 'react';
-import { Receipt, Radio, Stamp, Disc3 } from 'lucide-react';
+import { Ticket, Radio, Stamp, Disc3, Orbit } from 'lucide-react';
 
 const PHYSICAL_TEMPLATES = [
   {
     id: 'RECEIPTIFY',
-    label: 'Receiptify',
-    subLabel: 'Thermal Receipt',
-    icon: Receipt,
-    description: 'Vintage printed paper with monospace billing specs',
-    accentColor: '#EAE3D2',
+    label: 'Ticket Stub',
+    subLabel: 'Space Jazz Pass',
+    icon: Ticket,
+    description: 'Perforated pass with Swiss typography, artist portrait & barcode',
   },
   {
     id: 'CASSETTE',
     label: 'Cassette Tape',
-    subLabel: 'Y2K Transparent',
+    subLabel: 'Memory Anchors',
     icon: Radio,
-    description: 'Analog acrylic shell with spinning tape reels',
-    accentColor: '#10202e',
+    description: 'Acrylic shell with printed album art label & dual tape spools',
   },
   {
     id: 'STAMP',
-    label: 'Travel Stamp',
-    subLabel: 'Airmail Post',
+    label: 'Airmail Stamp',
+    subLabel: 'Scalloped Post',
     icon: Stamp,
-    description: 'Double-lined perforated postmark for journeys',
-    accentColor: '#EFECE6',
+    description: 'Vintage postage stamp with scalloped edges & postal cancellation mark',
   },
   {
     id: 'VINYL',
-    label: 'Concert Disc',
-    subLabel: 'Analog 33 RPM',
+    label: 'Concert Vinyl',
+    subLabel: '33⅓ RPM Record',
     icon: Disc3,
-    description: 'Microgroove vinyl disc with spinning label',
-    accentColor: '#091522',
+    description: '12" vinyl disc sliding out from gatefold album jacket',
+  },
+  {
+    id: 'GALAXY',
+    label: 'Cosmic Turntable',
+    subLabel: 'Planetary Orbits',
+    icon: Orbit,
+    description: 'Cosmic turntable platter with concentric orbits & planet info tags',
   },
 ];
 
@@ -40,43 +43,45 @@ export default function TemplateSelector({ selectedTemplate, onSelectTemplate })
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-mono font-bold uppercase tracking-wider text-[#91B9C5] flex items-center gap-1.5">
-          <span>1. Physical Template</span>
-          <span className="text-cyan-400">*</span>
+        <label className="text-xs font-mono font-bold uppercase tracking-wider text-sky-200 flex items-center gap-1.5">
+          <span>Physical Template</span>
         </label>
-        <span className="text-[10px] font-mono text-[#91B9C5]/70">
-          Selected: <strong className="text-white">{selectedTemplate}</strong>
+        <span className="text-[10px] font-mono text-slate-400">
+          Format: <strong className="text-sky-300 font-bold">{selectedTemplate}</strong>
         </span>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
         {PHYSICAL_TEMPLATES.map((tpl) => {
           const Icon = tpl.icon;
-          const isSelected = (selectedTemplate || 'RECEIPTIFY').toUpperCase() === tpl.id;
+          const isSelected = (selectedTemplate || 'CASSETTE').toUpperCase() === tpl.id;
 
           return (
             <button
               key={tpl.id}
               type="button"
               onClick={() => onSelectTemplate(tpl.id)}
-              className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between h-24 ${
+              className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between h-22 relative overflow-hidden ${
                 isSelected
-                  ? 'bg-[#183952] border-cyan-400 ring-2 ring-cyan-400/40 shadow-lg shadow-cyan-950/50 scale-[1.02]'
-                  : 'bg-[#081724] border-[#16354d] hover:bg-[#0d2336] hover:border-[#91B9C5]/40 text-[#91B9C5]/80'
+                  ? 'bg-[#0d253d] border-sky-400/60 text-white shadow-md ring-1 ring-sky-400/30'
+                  : 'bg-[#071523] border-sky-500/20 hover:bg-[#0c2034] hover:border-sky-400/40 text-slate-400'
               }`}
             >
-              <div className="flex items-center justify-between w-full">
-                <Icon className={`w-5 h-5 ${isSelected ? 'text-cyan-300' : 'text-[#91B9C5]'}`} />
+              {isSelected && (
+                <div className="absolute inset-0 bg-gradient-to-br from-[#00594c]/20 via-transparent to-sky-400/15 pointer-events-none" />
+              )}
+              <div className="flex items-center justify-between w-full relative z-10">
+                <Icon className={`w-4 h-4 ${isSelected ? 'text-sky-400' : 'text-slate-400'}`} />
                 {isSelected && (
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.9)]" />
                 )}
               </div>
 
-              <div>
-                <p className={`text-xs font-bold font-mono leading-tight ${isSelected ? 'text-white' : 'text-[#E8EEF0]'}`}>
+              <div className="relative z-10">
+                <p className={`text-xs font-bold font-mono leading-tight ${isSelected ? 'text-white' : 'text-slate-200'}`}>
                   {tpl.label}
                 </p>
-                <p className="text-[9.5px] font-mono text-[#91B9C5]/70 truncate mt-0.5">
+                <p className="text-[9.5px] font-mono text-slate-400 truncate mt-0.5">
                   {tpl.subLabel}
                 </p>
               </div>
@@ -87,4 +92,3 @@ export default function TemplateSelector({ selectedTemplate, onSelectTemplate })
     </div>
   );
 }
-

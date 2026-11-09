@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { playbackService } from '../services/MusicPlaybackService';
 
+let currentPlaylist = [];
+
 export const playerStore = {
   getState: () => {
     const snap = playbackService.getSnapshot();
@@ -16,6 +18,59 @@ export const playerStore = {
       volume: snap.volume ?? 0.85,
       isMuted: snap.isMuted ?? false,
     };
+  },
+  setPlaylist: (notes) => {
+    currentPlaylist = Array.isArray(notes) ? notes : [];
+  },
+  getPlaylist: () => currentPlaylist,
+  playNextTrack: () => {
+    if (!currentPlaylist || currentPlaylist.length === 0) {
+      const snap = playbackService.getSnapshot();
+      playbackService.seekTo(snap.duration || 30);
+      return;
+    }
+    const currentTrack = playbackService.getSnapshot().currentTrack;
+    const curId = String(currentTrack?.id || '');
+    let curIdx = currentPlaylist.findIndex(n => String(n.id) === curId);
+    let nextIdx = (curIdx >= 0 ? curIdx + 1 : 0) % currentPlaylist.length;
+    const nextNote = currentPlaylist[nextIdx];
+    if (nextNote) {
+      const start = Number(nextNote.audioSnippetStart ?? 0);
+      const dur = Number(nextNote.snippetDuration ?? 30);
+      playbackService.playTrack({
+        ...nextNote,
+        id: String(nextNote.id),
+      }, {
+        snippetStart: start,
+        snippetDuration: dur,
+        loop: false,
+      });
+      window.dispatchEvent(new CustomEvent('say_note_changed', { detail: { noteId: String(nextNote.id) } }));
+    }
+  },
+  playPrevTrack: () => {
+    if (!currentPlaylist || currentPlaylist.length === 0) {
+      playbackService.seekTo(0);
+      return;
+    }
+    const currentTrack = playbackService.getSnapshot().currentTrack;
+    const curId = String(currentTrack?.id || '');
+    let curIdx = currentPlaylist.findIndex(n => String(n.id) === curId);
+    let prevIdx = curIdx > 0 ? curIdx - 1 : currentPlaylist.length - 1;
+    const prevNote = currentPlaylist[prevIdx];
+    if (prevNote) {
+      const start = Number(prevNote.audioSnippetStart ?? 0);
+      const dur = Number(prevNote.snippetDuration ?? 30);
+      playbackService.playTrack({
+        ...prevNote,
+        id: String(prevNote.id),
+      }, {
+        snippetStart: start,
+        snippetDuration: dur,
+        loop: false,
+      });
+      window.dispatchEvent(new CustomEvent('say_note_changed', { detail: { noteId: String(prevNote.id) } }));
+    }
   },
   subscribe: (listener) => {
     return playbackService.subscribe((snap) => {
@@ -92,5 +147,8 @@ export function usePlayerStore() {
     setLooping: playerStore.setLooping,
     setVolume: playerStore.setVolume,
     toggleMute: playerStore.toggleMute,
+    playNextTrack: playerStore.playNextTrack,
+    playPrevTrack: playerStore.playPrevTrack,
+    setPlaylist: playerStore.setPlaylist,
   };
 }

@@ -52,8 +52,15 @@ public class NoteService implements INoteService {
                 throw new BadRequestException("External song URL is required");
             }
 
-            if (request.getTemplateType() != null && !VALID_TEMPLATES.contains(request.getTemplateType().toUpperCase())) {
-                throw new BadRequestException("Invalid template type: " + request.getTemplateType());
+            String rawTemplate = request.getTemplateType();
+            String cleanTemplate = "RECEIPTIFY";
+            if (rawTemplate != null && !rawTemplate.isBlank()) {
+                String upper = rawTemplate.toUpperCase();
+                String base = upper.contains(":") ? upper.split(":")[0] : upper;
+                if (!VALID_TEMPLATES.contains(base)) {
+                    throw new BadRequestException("Invalid template type: " + request.getTemplateType());
+                }
+                cleanTemplate = base;
             }
 
             if (request.getVisibility() != null && !VALID_VISIBILITY.contains(request.getVisibility().toUpperCase())) {
@@ -88,7 +95,7 @@ public class NoteService implements INoteService {
                     .audioSnippetStart(request.getAudioSnippetStart() != null ? request.getAudioSnippetStart() : 0)
                     .caption(request.getCaption())
                     .lyricSnippet(request.getLyricSnippet())
-                    .templateType(request.getTemplateType() != null ? request.getTemplateType().toUpperCase() : "RECEIPTIFY")
+                    .templateType(cleanTemplate)
                     .emotionTag(request.getEmotionTag())
                     .stickerBadge(request.getStickerBadge())
                     .visibility(request.getVisibility() != null ? request.getVisibility().toUpperCase() : "PUBLIC")
@@ -215,8 +222,12 @@ public class NoteService implements INoteService {
             if (request.getLyricSnippet() != null) {
                 note.setLyricSnippet(request.getLyricSnippet());
             }
-            if (request.getTemplateType() != null && VALID_TEMPLATES.contains(request.getTemplateType().toUpperCase())) {
-                note.setTemplateType(request.getTemplateType().toUpperCase());
+            if (request.getTemplateType() != null) {
+                String upper = request.getTemplateType().toUpperCase();
+                String base = upper.contains(":") ? upper.split(":")[0] : upper;
+                if (VALID_TEMPLATES.contains(base)) {
+                    note.setTemplateType(base);
+                }
             }
             if (request.getEmotionTag() != null) {
                 note.setEmotionTag(request.getEmotionTag());

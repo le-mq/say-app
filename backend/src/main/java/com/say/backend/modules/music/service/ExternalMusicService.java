@@ -73,6 +73,12 @@ public class ExternalMusicService implements IExternalMusicService {
 
     @Override
     @Async("taskExecutor")
+    public CompletableFuture<TrackSearchResponseDto> getVideoDetails(String videoId) {
+        return youtubeApiClient.getVideoDetails(videoId);
+    }
+
+    @Override
+    @Async("taskExecutor")
     public CompletableFuture<List<TrackSearchResponseDto>> searchMusic(String query, String platform) {
         try {
             if (query == null || query.isBlank()) {

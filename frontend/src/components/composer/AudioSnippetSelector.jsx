@@ -51,7 +51,26 @@ export default function AudioSnippetSelector({
   const isFixedSample = selectedTrack?.platform === 'ITUNES' || (!isYouTube && (selectedTrack?.duration || 0) <= 30);
   const canScrub = !isFixedSample;
 
-  const totalDuration = isFixedSample ? 30 : Math.max(30, selectedTrack?.duration || (isYouTube ? 264 : 30));
+  // Listen to exact YouTube duration detected via player (supports videos > 1 hour)
+  const [detectedDuration, setDetectedDuration] = React.useState(null);
+
+  useEffect(() => {
+    setDetectedDuration(null);
+  }, [selectedTrack?.id, selectedTrack?.externalSongUrl]);
+
+  useEffect(() => {
+    const handleDurationDetected = (e) => {
+      const dur = e?.detail?.duration;
+      if (dur && dur > 0) {
+        setDetectedDuration(dur);
+      }
+    };
+    window.addEventListener('say_track_duration_detected', handleDurationDetected);
+    return () => window.removeEventListener('say_track_duration_detected', handleDurationDetected);
+  }, []);
+
+  const effectiveTrackDuration = detectedDuration || selectedTrack?.duration || currentTrack?.fullDuration || currentTrack?.duration;
+  const totalDuration = isFixedSample ? 30 : Math.max(30, effectiveTrackDuration || (isYouTube ? 300 : 30));
   const maxStart = isFixedSample ? 0 : Math.max(0, totalDuration - snippetDuration);
 
   const startSec = isFixedSample ? 0 : Math.min(Math.max(0, Number(snippetStart) || 0), maxStart);
@@ -321,64 +340,64 @@ export default function AudioSnippetSelector({
   const initialRightPct = initialLeftPct + initialWidthPct;
 
   return (
-    <div className="space-y-3 bg-[#081724] border border-[#16354d] rounded-2xl p-4 select-none">
+    <div className="space-y-3 bg-[#10141a]/95 border border-white/10 rounded-2xl p-4 select-none">
       
       {/* 1. Header & Duration Toggle */}
       <div className="flex items-center justify-between">
-        <label className="text-xs font-mono font-bold uppercase tracking-wider text-[#91B9C5] flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5 text-cyan-400" />
-          <span>3. Audio Snippet</span>
+        <label className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-neutral-400" />
+          <span>Audio Snippet</span>
         </label>
 
         {/* 30s vs 45s Duration Picker (Disabled for fixed 30s samples) */}
         {!isFixedSample ? (
-          <div className="flex items-center gap-1 bg-[#06121d] p-0.5 rounded-xl border border-[#132c40]">
+          <div className="flex items-center gap-1 bg-[#0a0d12] p-0.5 rounded-xl border border-white/10">
             <button
               type="button"
               onClick={() => onSnippetDurationChange(30)}
               className={`px-2.5 py-0.5 rounded-lg text-[10.5px] font-mono font-bold transition-all cursor-pointer ${
                 snippetDuration === 30
-                  ? 'bg-cyan-500 text-black shadow-sm'
-                  : 'text-[#91B9C5]/70 hover:text-white'
+                  ? 'bg-neutral-200 text-neutral-900 shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
-              30s Snippet
+              30s
             </button>
             <button
               type="button"
               onClick={() => onSnippetDurationChange(45)}
               className={`px-2.5 py-0.5 rounded-lg text-[10.5px] font-mono font-bold transition-all cursor-pointer ${
                 snippetDuration === 45
-                  ? 'bg-cyan-500 text-black shadow-sm'
-                  : 'text-[#91B9C5]/70 hover:text-white'
+                  ? 'bg-neutral-200 text-neutral-900 shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
-              45s Snippet
+              45s
             </button>
           </div>
         ) : (
-          <span className="text-[10px] font-mono text-[#91B9C5]/70">
+          <span className="text-[10px] font-mono text-neutral-500">
             30s Audio Window
           </span>
         )}
       </div>
 
       {!selectedTrack ? (
-        <div className="p-4 rounded-xl bg-[#06121d] border border-dashed border-[#16354d] text-center text-xs font-mono text-[#91B9C5]/60">
+        <div className="p-4 rounded-xl bg-[#0a0d12] border border-dashed border-white/10 text-center text-xs font-mono text-neutral-500">
           Please search or paste a link above to preview your snippet.
         </div>
       ) : (
         <div className="space-y-3">
           
-          {/* 2. Instagram-Style Minimalist Time Readout */}
+          {/* 2. Minimalist Time Readout */}
           <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-[#91B9C5]">
+            <span className="text-neutral-400">
               Start: <strong ref={timeStartRef} className="text-white font-bold">{formatTime(startSec)}</strong>
             </span>
-            <span className="font-bold text-[11px] font-mono text-cyan-400">
-              {snippetDuration}s Audio Window
+            <span className="font-bold text-[11px] font-mono text-sky-300">
+              {snippetDuration}s Snippet {effectiveTrackDuration ? `(Total ${formatTime(effectiveTrackDuration)})` : ''}
             </span>
-            <span className="text-[#91B9C5]">
+            <span className="text-neutral-400">
               End: <strong ref={timeEndRef} className="text-white font-bold">{formatTime(endSec)}</strong>
             </span>
           </div>
@@ -390,7 +409,7 @@ export default function AudioSnippetSelector({
             onTouchStart={handlePointerDown}
             onClick={handleClick}
             style={{ touchAction: 'none' }}
-            className={`relative w-full h-22 bg-[#05111d] rounded-2xl overflow-hidden border border-[#14324a] px-3 flex items-center justify-between select-none shadow-inner group ${
+            className={`relative w-full h-20 bg-[#0a0d12] rounded-2xl overflow-hidden border border-white/10 px-3 flex items-center justify-between select-none shadow-inner group ${
               canScrub ? 'cursor-pointer' : 'cursor-default'
             }`}
             title={canScrub ? "Click or drag anywhere to select your 30s snippet" : "Fixed 30s sample"}
@@ -404,7 +423,7 @@ export default function AudioSnippetSelector({
                 >
                   <div
                     style={{ height: `${height}px` }}
-                    className="w-[2px] sm:w-[2.5px] rounded-full bg-[#15344e]"
+                    className="w-[2px] sm:w-[2.5px] rounded-full bg-[#1e2633]"
                   />
                 </div>
               ))}
@@ -425,7 +444,7 @@ export default function AudioSnippetSelector({
                 >
                   <div
                     style={{ height: `${height}px` }}
-                    className="w-[2px] sm:w-[2.5px] rounded-full bg-gradient-to-t from-cyan-400 to-[#91B9C5] shadow-[0_0_8px_rgba(34,211,238,0.5)]"
+                    className="w-[2px] sm:w-[2.5px] rounded-full bg-neutral-200"
                   />
                 </div>
               ))}
@@ -440,31 +459,31 @@ export default function AudioSnippetSelector({
               }}
               className={`absolute top-1 bottom-1 rounded-xl pointer-events-none overflow-hidden flex items-center justify-between ${
                 isFixedSample 
-                  ? 'border border-amber-400/50 bg-amber-400/[0.04]' 
-                  : 'border border-cyan-400/90 bg-cyan-400/[0.08] shadow-[0_0_15px_rgba(34,211,238,0.2)]'
+                  ? 'border border-amber-400/40 bg-amber-400/[0.04]' 
+                  : 'border border-white/70 bg-white/[0.08] shadow-sm'
               }`}
             >
               {/* Internal Active Listening Progress Trail */}
               <div
                 ref={progressFillRef}
                 style={{ width: '0%' }}
-                className="absolute top-0 bottom-0 left-0 bg-cyan-400/[0.16] pointer-events-none"
+                className="absolute top-0 bottom-0 left-0 bg-white/[0.12] pointer-events-none"
               />
 
-              {/* Internal Real-Time Playhead Needle (strictly clamped inside) */}
+              {/* Internal Real-Time Playhead Needle */}
               <div
                 ref={playheadNeedleRef}
                 style={{ display: 'none', left: '0%' }}
-                className="absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_10px_#38bdf8] pointer-events-none z-20"
+                className="absolute top-0 bottom-0 w-[2px] bg-white pointer-events-none z-20"
               >
-                <div className="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#38bdf8] -ml-[3px] -mt-0.5" />
+                <div className="w-2 h-2 rounded-full bg-white -ml-[3px] -mt-0.5" />
               </div>
 
-              {/* Left & Right subtle trimmer handles (Only visible if canScrub) */}
+              {/* Left & Right subtle trimmer handles */}
               {canScrub && (
                 <>
-                  <div className="w-[3px] h-5 rounded-full bg-cyan-300 shadow-[0_0_4px_#22d3ee] ml-1 z-10" />
-                  <div className="w-[3px] h-5 rounded-full bg-cyan-300 shadow-[0_0_4px_#22d3ee] mr-1 z-10" />
+                  <div className="w-[3px] h-4 rounded-full bg-white/80 ml-1 z-10" />
+                  <div className="w-[3px] h-4 rounded-full bg-white/80 mr-1 z-10" />
                 </>
               )}
             </div>
@@ -476,10 +495,10 @@ export default function AudioSnippetSelector({
             <button
               type="button"
               onClick={handleTogglePlay}
-              className={`flex items-center gap-2 px-5 py-2 rounded-xl text-xs font-mono font-bold transition-all shadow-md cursor-pointer ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all shadow-sm cursor-pointer ${
                 isCurrentSnippetPlaying
-                  ? 'bg-cyan-400 text-[#07131e] ring-4 ring-cyan-400/30'
-                  : 'bg-gradient-to-r from-cyan-500 to-[#195a89] hover:from-cyan-400 hover:to-[#206fa8] text-[#07131e]'
+                  ? 'bg-white text-neutral-900 ring-2 ring-white/30'
+                  : 'bg-neutral-200 hover:bg-white text-neutral-900'
               }`}
             >
               {isCurrentSnippetPlaying ? (
@@ -490,7 +509,7 @@ export default function AudioSnippetSelector({
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                  <span ref={playButtonLabelRef}>Play ({formatTime(startSec)} - {formatTime(endSec)})</span>
+                  <span ref={playButtonLabelRef}>Play Snippet ({formatTime(startSec)} - {formatTime(endSec)})</span>
                 </>
               )}
             </button>

@@ -90,13 +90,33 @@ export const musicService = {
     };
   },
 
-  // Zero-token Instant YouTube metadata resolution via YouTube oEmbed CDN (0 API units)
+  // Zero-token Instant YouTube metadata resolution with true duration lookup
   resolveYoutubeUrl: async (url) => {
     const videoId = musicService.extractYoutubeId(url);
     if (!videoId) return null;
 
     const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     const cleanUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+    // 1. First priority: Check backend YouTube details endpoint for true duration (even > 1 hour)
+    try {
+      const detailsRes = await api.get(`/music/search/details?videoId=${videoId}`);
+      const details = detailsRes?.data?.data || detailsRes?.data;
+      if (details && details.songTitle) {
+        const cleaned = musicService.cleanMetadata(details.songTitle, details.artistName);
+        const durationSec = details.durationMs ? Math.round(details.durationMs / 1000) : null;
+        return {
+          id: `yt_${videoId}`,
+          youtubeId: videoId,
+          songTitle: cleaned.songTitle,
+          artistName: cleaned.artistName,
+          songImageUrl: details.songImageUrl || thumbnailUrl,
+          externalSongUrl: cleanUrl,
+          duration: durationSec,
+          platform: 'YOUTUBE',
+        };
+      }
+    } catch (_) {}
 
     try {
       const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(cleanUrl)}`);

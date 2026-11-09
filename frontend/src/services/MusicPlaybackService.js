@@ -468,6 +468,22 @@ export class YouTubeAdapter {
 
       const current = this.player.getCurrentTime();
 
+      // Capture exact video duration from YouTube Player (even if > 1 hour)
+      try {
+        const fullDur = Math.round(this.player.getDuration() || 0);
+        if (fullDur > 0 && (!this.service.currentTrack?.duration || this.service.currentTrack.duration !== fullDur)) {
+          if (this.service.currentTrack) {
+            this.service.currentTrack.duration = fullDur;
+            this.service.currentTrack.fullDuration = fullDur;
+          }
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('say_track_duration_detected', {
+              detail: { trackId: this.service.currentTrack?.id, duration: fullDur }
+            }));
+          }
+        }
+      } catch (_) {}
+
       // Shield ticker during seek transitions (prevents reading stale previous time)
       if (this.isSeeking) {
         if (Math.abs(current - this.targetSeekTime) < 1.8 || (Date.now() - this.seekRequestedAt > 2200)) {
@@ -501,6 +517,7 @@ export class YouTubeAdapter {
             console.warn('[YouTubeAdapter] loop replay error:', err);
           }
         } else {
+          this.stopTicker();
           try {
             this.player.seekTo(this.snippetStart, true);
           } catch (_) {}

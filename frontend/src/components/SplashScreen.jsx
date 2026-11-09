@@ -115,7 +115,7 @@ export default function SplashScreen({ onComplete }) {
           return true;
         }
       }
-    } catch {}
+    } catch { }
 
     // 2. Initial app launch / page refresh: ALWAYS show splash screen
     if (!appHasMountedOnce) {
@@ -166,21 +166,21 @@ export default function SplashScreen({ onComplete }) {
       setStage(1);
     }, 350);
 
-    // 2.2s: Text stays comfortably visible for ~1.85s
+    // 1.5s: Text stays comfortably visible for ~1.85s
     // then explodes into an expansive 360° cosmic supernova
     const t2 = setTimeout(() => {
       setStage(2);
-    }, 2200);
+    }, 1500);
 
-    // 3.6s: Glassmorphism backdrop smoothly dissolves after particles envelop the screen
+    // 2.9s: Glassmorphism backdrop smoothly dissolves after particles envelop the screen
     const t3 = setTimeout(() => {
       setIsFadingOut(true);
-    }, 3600);
+    }, 2900);
 
-    // 4.2s: Complete sequence and unmount seamlessly
+    // 3.5: Complete sequence and unmount seamlessly
     const t4 = setTimeout(() => {
       finishSplash();
-    }, 4200);
+    }, 3500);
 
     return () => {
       clearTimeout(t1);
@@ -302,9 +302,8 @@ export default function SplashScreen({ onComplete }) {
   return (
     <div
       onClick={finishSplash}
-      className={`fixed inset-0 z-50 bg-[#081724]/40 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden select-none transition-opacity duration-700 ease-out will-change-transform ${
-        isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100 cursor-pointer'
-      }`}
+      className={`fixed inset-0 z-50 bg-[#081724]/40 backdrop-blur-md flex flex-col items-center justify-center overflow-hidden select-none transition-opacity duration-700 ease-out will-change-transform ${isFadingOut ? 'opacity-0 pointer-events-none' : 'opacity-100 cursor-pointer'
+        }`}
       style={{ touchAction: 'none' }}
       title="Tap anywhere to skip"
     >
@@ -330,7 +329,7 @@ export default function SplashScreen({ onComplete }) {
         >
           {/* Main Phrase: S[ound] A[round] Y[ou] - Anchored Letters with Butter-Smooth Extension */}
           <div className="flex items-baseline justify-center font-serif tracking-normal select-none">
-            
+
             {/* Word 1: "S" + "ound" */}
             <div className="flex items-baseline">
               <span className="text-4xl sm:text-5xl md:text-6xl font-bold text-[#91B9C5] drop-shadow-[0_2px_22px_rgba(145,185,197,0.4)]">
@@ -392,11 +391,10 @@ export default function SplashScreen({ onComplete }) {
 
           {/* Tagline: "SAY IT WITHOUT SAYING IT" with Cosmic Lavender Accent */}
           <div
-            className={`mt-4 sm:mt-5 transition-all duration-400 ease-out ${
-              stage >= 1
-                ? 'opacity-90 translate-y-0'
-                : 'opacity-0 translate-y-2'
-            }`}
+            className={`mt-4 sm:mt-5 transition-all duration-400 ease-out ${stage >= 1
+              ? 'opacity-90 translate-y-0'
+              : 'opacity-0 translate-y-2'
+              }`}
           >
             <span className="font-grotesk text-[10px] sm:text-xs font-semibold tracking-[0.26em] text-[#B39DDB] uppercase drop-shadow-[0_0_12px_rgba(179,157,219,0.5)]">
               SAY IT WITHOUT SAYING IT

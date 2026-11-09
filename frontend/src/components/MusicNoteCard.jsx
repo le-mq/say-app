@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { formatTime } from '../services/musicService';
 import { formatTimeDetails } from '../utils/timeFormat';
+import { usePlayerStore } from '../store/playerStore';
 
 export default function MusicNoteCard({ 
   note, 
@@ -23,6 +24,11 @@ export default function MusicNoteCard({
   const [replySongTitle, setReplySongTitle] = useState('');
   const [replyText, setReplyText] = useState('');
   const [replies, setReplies] = useState(note?.dialogues || []);
+
+  const { currentTrack, isPlaying: globalIsPlaying, playTrack, togglePlay } = usePlayerStore();
+  const isCardPlaying = typeof isPlaying === 'boolean' && isPlaying
+    ? true
+    : (currentTrack?.id === note?.id && globalIsPlaying);
 
   useEffect(() => {
     setLikes(note?.likesCount ?? note?.likes ?? 0);
@@ -59,17 +65,51 @@ export default function MusicNoteCard({
     if (onReplyAdded) onReplyAdded(note.id);
   };
 
-  const template = (note.templateType || 'RECEIPTIFY').toUpperCase();
-  const userInitial = (note.userDisplayName || 'Audiophile').charAt(0).toUpperCase();
+  const rawTemplate = (note?.templateType || 'RECEIPTIFY').toUpperCase();
+  const template = rawTemplate.includes(':') ? rawTemplate.split(':')[0] : rawTemplate;
+
+  // Extract snippetDuration (45s or 30s) seamlessly
+  const urlDurationMatch = note?.externalSongUrl?.match(/[#&?]snippetDur=(\d+)/);
+  const snippetDuration = Number(
+    note?.snippetDuration ||
+    (rawTemplate.includes(':') ? rawTemplate.split(':')[1] : null) ||
+    (urlDurationMatch ? urlDurationMatch[1] : null) ||
+    (note?.audioSnippetEnd && note?.audioSnippetStart !== undefined ? note.audioSnippetEnd - note.audioSnippetStart : null) ||
+    30
+  );
+  const audioSnippetStart = Number(note?.audioSnippetStart) || 0;
+  const audioSnippetEnd = audioSnippetStart + snippetDuration;
+
+  const userInitial = (note?.userDisplayName || 'Audiophile').charAt(0).toUpperCase();
+
+  // Resilient internal play toggle
+  const handleInternalPlay = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (onPlayToggle) {
+      onPlayToggle(e);
+    } else if (note?.externalSongUrl || note?.previewAudioUrl) {
+      if (currentTrack?.id === note.id && globalIsPlaying) {
+        togglePlay();
+      } else {
+        playTrack({
+          ...note,
+          audioSnippetStart,
+          snippetDuration,
+        }, { 
+          snippetStart: audioSnippetStart, 
+          snippetDuration: snippetDuration, 
+          loop: true 
+        });
+      }
+    }
+  };
 
   // Instant Card Click Playback (play snippet anywhere clicked on the card)
   const handleCardClick = (e) => {
     if (e.target.closest('button, input, textarea, a, form')) {
       return;
     }
-    if (onPlayToggle) {
-      onPlayToggle(e);
-    }
+    handleInternalPlay(e);
   };
 
   const renderStickerSeal = () => {
@@ -85,17 +125,27 @@ export default function MusicNoteCard({
       }
     }
 
-    // 1. Direct Image or GIF URL
+    // 1. Direct Image or GIF URL (Tactile Photobooth Polaroid / Keepsake Snapshot)
     if (typeof badge === 'string' && (badge.startsWith('http://') || badge.startsWith('https://') || badge.startsWith('data:image/') || badge.endsWith('.gif') || badge.endsWith('.png') || badge.endsWith('.webp'))) {
       return (
-        <div className="absolute top-2 right-2 z-30 group cursor-pointer transition-transform hover:scale-105 hover:rotate-0">
-          <div className="relative p-1 bg-white/95 rounded-lg border border-white/80 shadow-[0_8px_24px_rgba(0,0,0,0.55)] -rotate-3 transition-transform">
-            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-4 h-1.5 bg-amber-200/90 rounded-xs -rotate-2 border-x border-amber-400/60" />
-            <img
-              src={badge}
-              alt="Sticker"
-              className="w-13 h-13 object-cover rounded-md"
-            />
+        <div className="absolute top-2 right-2 z-30 group cursor-pointer transition-all hover:scale-105 hover:rotate-0 -rotate-3">
+          <div className="relative p-1.5 pb-2.5 bg-[#fdfbf7] rounded-sm border border-neutral-300/80 shadow-[0_12px_28px_rgba(0,0,0,0.65)] flex flex-col items-center">
+            {/* Washi Tape Strip at top (SAY Ice Blue / Cyan Washi Tape) */}
+            <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-2 bg-sky-200/90 backdrop-blur-xs rounded-2xs -rotate-1 border-x border-sky-400/60 shadow-xs" />
+            
+            {/* Enlarged Photo / Animated GIF Container */}
+            <div className="w-20 h-20 sm:w-22 sm:h-22 overflow-hidden rounded-2xs bg-black/60 border border-neutral-200/60">
+              <img
+                src={badge}
+                alt="Photobooth memory sticker"
+                className="w-full h-full object-cover select-none"
+              />
+            </div>
+
+            {/* Subtle Photobooth Print Tag */}
+            <span className="text-[6.5px] font-mono font-bold tracking-widest uppercase text-slate-500 mt-1 select-none">
+              PHOTOBOOT • MEMORY
+            </span>
           </div>
         </div>
       );
@@ -114,33 +164,33 @@ export default function MusicNoteCard({
         </div>
       ),
       'Star Shimmer': (
-        <div className="w-8 h-8 rounded-full bg-amber-950/90 border-2 border-amber-300 shadow-[0_0_14px_rgba(252,211,77,0.7)] flex items-center justify-center">
-          <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+        <div className="w-8 h-8 rounded-full bg-[#081f33] border-2 border-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.5)] flex items-center justify-center">
+          <Sparkles className="w-4 h-4 text-sky-300 animate-pulse" />
         </div>
       ),
       'Rain Drops': (
-        <div className="w-8 h-8 rounded-full bg-[#121c2e]/90 border border-violet-400/60 shadow-[0_0_12px_rgba(179,157,219,0.35)] flex items-center justify-center">
-          <CloudRain className="w-4 h-4 text-violet-300" />
+        <div className="w-8 h-8 rounded-full bg-[#0d2238]/90 border border-sky-400/60 shadow-[0_0_12px_rgba(56,189,248,0.35)] flex items-center justify-center">
+          <CloudRain className="w-4 h-4 text-sky-300" />
         </div>
       ),
       'Lo-Fi Cat': (
-        <div className="w-8 h-8 rounded-full bg-[#1b263b] border-2 border-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.6)] flex items-center justify-center">
-          <Radio className="w-4 h-4 text-purple-300" />
+        <div className="w-8 h-8 rounded-full bg-[#0a2233] border-2 border-[#91B9C5] shadow-[0_0_12px_rgba(145,185,197,0.5)] flex items-center justify-center">
+          <Radio className="w-4 h-4 text-[#91B9C5]" />
         </div>
       ),
       'Cassette Reel': (
-        <div className="w-8 h-8 rounded-xl bg-[#142330] border-2 border-amber-400 shadow-[0_0_12px_rgba(251,191,36,0.6)] flex items-center justify-center">
-          <Disc className="w-4 h-4 text-amber-400" />
+        <div className="w-8 h-8 rounded-xl bg-[#0a1820] border-2 border-[#00594c] shadow-[0_0_12px_rgba(0,89,76,0.6)] flex items-center justify-center">
+          <Disc className="w-4 h-4 text-sky-300" />
         </div>
       ),
       'Cosmic Orbit': (
-        <div className="w-8 h-8 rounded-full bg-[#1e1035] border-2 border-indigo-400 shadow-[0_0_14px_rgba(129,140,248,0.7)] flex items-center justify-center">
-          <Orbit className="w-4 h-4 text-indigo-300" />
+        <div className="w-8 h-8 rounded-full bg-[#0a2138] border-2 border-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.6)] flex items-center justify-center">
+          <Orbit className="w-4 h-4 text-sky-200" />
         </div>
       ),
       'Midnight Coffee': (
-        <div className="w-8 h-8 rounded-full bg-[#241711] border-2 border-amber-600 shadow-[0_0_10px_rgba(217,119,6,0.5)] flex items-center justify-center">
-          <Coffee className="w-4 h-4 text-amber-500" />
+        <div className="w-8 h-8 rounded-full bg-[#081b2e] border-2 border-amber-400/70 shadow-[0_0_10px_rgba(251,191,36,0.3)] flex items-center justify-center">
+          <Coffee className="w-4 h-4 text-amber-300" />
         </div>
       ),
       'Vinyl 33 RPM': (
@@ -149,17 +199,17 @@ export default function MusicNoteCard({
         </div>
       ),
       'Crimson Wax': (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-800 to-rose-600 border-2 border-red-300 shadow-[0_4px_12px_rgba(225,29,72,0.7)] flex items-center justify-center font-serif text-[11px] font-bold text-amber-200">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-red-800 to-rose-600 border-2 border-red-300 shadow-[0_4px_12px_rgba(225,29,72,0.7)] flex items-center justify-center font-serif text-[11px] font-bold text-amber-100">
           S
         </div>
       ),
       'Hologram Star': (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 via-purple-600 to-cyan-400 border border-white/80 shadow-[0_0_12px_rgba(255,255,255,0.7)] flex items-center justify-center">
-          <Star className="w-4 h-4 text-amber-200 fill-amber-200" />
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00594c] via-[#09354d] to-sky-400 border border-white/80 shadow-[0_0_12px_rgba(255,255,255,0.7)] flex items-center justify-center">
+          <Star className="w-4 h-4 text-sky-200 fill-sky-200" />
         </div>
       ),
       'Washi Tape': (
-        <div className="px-2 py-0.5 bg-amber-200 text-neutral-900 border border-amber-400 text-[8px] font-mono font-bold -rotate-6 shadow-md rounded-xs">
+        <div className="px-2 py-0.5 bg-sky-200 text-slate-900 border border-sky-400 text-[8px] font-mono font-bold -rotate-6 shadow-md rounded-xs">
           WASHI
         </div>
       ),
@@ -184,8 +234,8 @@ export default function MusicNoteCard({
         </div>
       ),
       'Heartbeat': (
-        <div className="w-8 h-8 rounded-full bg-purple-950/90 border-2 border-purple-400 shadow-[0_0_12px_rgba(192,132,252,0.6)] flex items-center justify-center">
-          <Heart className="w-4 h-4 text-purple-300 fill-purple-300 animate-pulse" />
+        <div className="w-8 h-8 rounded-full bg-rose-950/90 border-2 border-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.6)] flex items-center justify-center">
+          <Heart className="w-4 h-4 text-rose-300 fill-rose-300 animate-pulse" />
         </div>
       ),
       'Equalizer': (
@@ -209,33 +259,33 @@ export default function MusicNoteCard({
         </div>
       ),
       'Floating notes': (
-        <div className="w-8 h-8 rounded-full bg-[#101b2b] border-2 border-indigo-400 shadow-[0_0_12px_rgba(129,140,248,0.6)] flex items-center justify-center">
-          <Music className="w-4 h-4 text-indigo-300" />
+        <div className="w-8 h-8 rounded-full bg-[#092236] border-2 border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)] flex items-center justify-center">
+          <Music className="w-4 h-4 text-sky-300" />
         </div>
       ),
       'Moon': (
-        <div className="w-8 h-8 rounded-full bg-[#1a1c2e] border-2 border-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.6)] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full bg-[#081e33] border-2 border-amber-300/80 shadow-[0_0_12px_rgba(251,191,36,0.4)] flex items-center justify-center">
           <Moon className="w-4 h-4 text-amber-200 fill-amber-200/40" />
         </div>
       ),
       'Orbit': (
-        <div className="w-8 h-8 rounded-full bg-[#1a1c2e] border-2 border-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.6)] flex items-center justify-center">
-          <Moon className="w-4 h-4 text-amber-200 fill-amber-200/40" />
+        <div className="w-8 h-8 rounded-full bg-[#081e33] border-2 border-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.7)] flex items-center justify-center">
+          <Orbit className="w-4 h-4 text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.9)]" />
         </div>
       ),
       'Flame Seal': (
-        <div className="w-8 h-8 rounded-full bg-[#261005] border-2 border-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.6)] flex items-center justify-center">
-          <Flame className="w-4 h-4 text-orange-400" />
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-950 via-[#0a2335] to-[#04121c] border-2 border-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.7)] flex items-center justify-center">
+          <Flame className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
         </div>
       ),
       'Zen Leaf': (
-        <div className="w-8 h-8 rounded-full bg-[#0c2417] border-2 border-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] flex items-center justify-center">
-          <Sparkles className="w-4 h-4 text-emerald-400" />
+        <div className="w-8 h-8 rounded-full bg-[#072417] border-2 border-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)] flex items-center justify-center">
+          <Sparkles className="w-4 h-4 text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
         </div>
       ),
       'Ocean Wave': (
-        <div className="w-8 h-8 rounded-full bg-[#092233] border-2 border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)] flex items-center justify-center">
-          <Waves className="w-4 h-4 text-cyan-400" />
+        <div className="w-8 h-8 rounded-full bg-[#061e30] border-2 border-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.6)] flex items-center justify-center">
+          <Waves className="w-4 h-4 text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
         </div>
       ),
     };
@@ -254,23 +304,26 @@ export default function MusicNoteCard({
   return (
     <article 
       onClick={handleCardClick}
-      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e2233]/85 via-[#0a1c2b]/90 to-[#071522]/95 border border-white/[0.08] shadow-2xl ${
+      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden ${
         compact ? 'h-[360px] p-3' : 'h-[500px]'
       } ${
         isActive 
-          ? 'opacity-100' 
-          : 'opacity-70 hover:opacity-90'
+          ? 'opacity-100 ring-1 ring-sky-400/40' 
+          : 'opacity-85 hover:opacity-100'
       }`}
     >
+      {/* SAY Ambient Navy & Petrol Blue radial glows */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(0,89,76,0.2)_0%,transparent_60%)] pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.12)_0%,transparent_50%)] pointer-events-none" />
       
       {/* 1. HEADER: User Identity, Time & Emotion Tag (Chapter 4.7) */}
-      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-white/[0.06] shrink-0">
+      <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-sky-500/20 shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-[#102434] border border-[#1e4566] shrink-0">
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-[#102942] border border-sky-400/40 shrink-0">
             {note.userAvatarUrl ? (
               <img src={note.userAvatarUrl} alt={note.userDisplayName} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center font-bold text-xs text-[#91B9C5]">
+              <div className="w-full h-full flex items-center justify-center font-bold text-xs text-sky-200">
                 {userInitial}
               </div>
             )}
@@ -279,10 +332,20 @@ export default function MusicNoteCard({
             <h4 className="text-xs font-bold text-[#E8EEF0] truncate leading-tight flex items-center gap-1">
               <span>{note.userDisplayName || "Audiophile"}</span>
             </h4>
-            <p className="text-[10px] font-mono text-[#91B9C5]/70 truncate flex items-center gap-1">
-              <span>{formattedTimeAgo}</span>
-              {timeInfo.time && !timeInfo.isToday && (
-                <span className="text-[#91B9C5]/50">· {timeInfo.date}</span>
+            <p className="text-[10px] font-mono text-[#91B9C5] truncate flex items-center gap-1.5">
+              {timeInfo.isToday ? (
+                <span>{timeInfo.relative || "Just now"}</span>
+              ) : timeInfo.diffDays === 1 ? (
+                <>
+                  <span>Yesterday</span>
+                  {timeInfo.time && <span className="text-sky-400/60">· {timeInfo.time}</span>}
+                </>
+              ) : (
+                <>
+                  <span>{timeInfo.date}</span>
+                  {timeInfo.time && <span className="text-sky-400/60">· {timeInfo.time}</span>}
+                  <span className="text-sky-400/50">({timeInfo.relative})</span>
+                </>
               )}
             </p>
           </div>
@@ -291,13 +354,13 @@ export default function MusicNoteCard({
         {/* Visibility & Emotion Tag */}
         <div className="flex items-center gap-1.5 shrink-0">
           {note.visibility === 'FRIENDS' && (
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#102434] text-[#91B9C5] border border-[#1e4566] flex items-center gap-1">
-              <Users className="w-2.5 h-2.5" />
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#0a2338] text-sky-200 border border-sky-400/40 flex items-center gap-1">
+              <Users className="w-2.5 h-2.5 text-sky-300" />
               <span>Friends</span>
             </span>
           )}
           {note.emotionTag && (
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.04] text-purple-100 border border-white/[0.08]">
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#0c243a]/90 text-sky-200 border border-sky-400/40 shadow-xs">
               {note.emotionTag}
             </span>
           )}
@@ -305,246 +368,549 @@ export default function MusicNoteCard({
       </div>
 
       {/* 2. CENTER PIECE: STANDARDIZED PHYSICAL ARTIFACT TEMPLATE */}
-      <div className="flex-1 w-full my-2 flex items-center justify-center overflow-hidden">
+      <div className="relative z-10 flex-1 w-full my-2 flex items-center justify-center overflow-hidden">
         
-        {/* TEMPLATE A: RECEIPTIFY TICKET */}
+        {/* TEMPLATE A: RECEIPTIFY TICKET (Space Jazz & Cinema Ticket Stub) */}
         {template === 'RECEIPTIFY' && (
-          <div className="relative w-full h-[225px] bg-[#EAE3D2] text-[#1c242c] p-3 font-mono shadow-[0_12px_30px_rgba(0,0,0,0.6)] rounded-sm border-t-4 border-b-4 border-dashed border-[#d5cbba] flex flex-col justify-between overflow-hidden">
+          <div className="relative w-full h-[230px] bg-[#f4efe8] text-[#121316] p-3 font-mono shadow-[0_14px_35px_rgba(0,0,0,0.6)] rounded-xl border border-[#d8d0c0] flex flex-col justify-between overflow-hidden">
             {renderStickerSeal()}
 
-            <div className="pr-14">
-              <div className="text-center font-extrabold text-[11px] tracking-widest uppercase">
-                RECEIPTIFY
-              </div>
-              <div className="text-center text-[7.5px] tracking-widest text-neutral-600 uppercase mb-1">
-                SAY AUDIONOTE ARCHIVE
-              </div>
-
-              <div className="border-t border-b border-dashed border-neutral-400 py-0.5 mb-1 flex justify-between text-[7.5px] uppercase tracking-wider text-neutral-700">
-                <span className="truncate max-w-[130px]">
-                  {note.orderNumber || (note.userDisplayName ? `ORD #${(note.id || '01').toString().slice(-4).toUpperCase()} FOR ${note.userDisplayName.toUpperCase()}` : "ORD ARCHIVE")}
-                </span>
-                <span className="shrink-0">{formattedTimeAgo}</span>
-              </div>
-
-              <div>
-                <h3 className="font-extrabold text-[11px] tracking-wider uppercase text-neutral-900 leading-tight truncate">
-                  {note.songTitle || "NIGHT DRIVE / MIDNIGHT AMBIENT"}
-                </h3>
-                <p className="text-[9px] tracking-wider uppercase text-neutral-700 font-semibold truncate">
-                  {note.artistName || "KHRUANGBIN VIBE"}
-                </p>
-                <p className="text-[7.5px] text-neutral-600 uppercase mt-0.5">
-                  CLIP: {formatTime(note.audioSnippetStart || "0:10")} - {formatTime(note.audioSnippetEnd || "0:40")}
-                </p>
-              </div>
-
-              {/* Lyric Snippet Box (Italic Serif) */}
-              {note.lyricSnippet && (
-                <div className="my-1 p-1 bg-[#dfd6c4]/90 border-l-3 border-neutral-900 text-[9.5px] font-serif italic font-bold tracking-wide leading-tight text-neutral-900 line-clamp-2 break-words">
-                  "{note.lyricSnippet}"
-                </div>
-              )}
-
-              {/* Personal Caption */}
-              {note.caption && (
-                <div className="text-[8px] leading-tight text-neutral-800 flex items-start gap-1 line-clamp-1 mt-0.5">
-                  <Sparkles className="w-2.5 h-2.5 text-neutral-600 shrink-0 mt-0.5" />
-                  <span>"{note.caption}"</span>
-                </div>
-              )}
+            {/* Left Perforated Tear Notch & Punch Holes */}
+            <div className="absolute left-0 top-0 bottom-0 w-3 flex flex-col justify-between py-2 items-center pointer-events-none opacity-40">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="w-1.5 h-1.5 rounded-full bg-[#121316]" />
+              ))}
             </div>
 
-            {/* Acoustic Waveform preview bars */}
-            <div className="mt-1 flex flex-col items-center">
-              <div className="flex items-center justify-center gap-2 w-full text-neutral-900">
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onPlayToggle(e); }}
-                  className="w-5 h-5 rounded-full bg-neutral-900 text-[#EAE3D2] flex items-center justify-center hover:scale-105 transition-all cursor-pointer shrink-0"
-                  title={isPlaying ? "Pause Note" : "Play Note Snippet"}
-                >
-                  {isPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
-                </button>
-                <div className="flex items-center gap-0.5 h-3">
-                  {[3, 6, 9, 12, 16, 11, 7, 14, 18, 12, 8, 5, 10, 14, 8, 4].map((h, i) => (
+            <div className="pl-4 pr-12">
+              {/* Header: Boarding Pass & Space Jazz / Cinema Archive */}
+              <div className="flex items-center justify-between border-b border-dashed border-neutral-400 pb-1 mb-2 text-[8px] font-bold tracking-widest uppercase text-neutral-700">
+                <span className="flex items-center gap-1 text-neutral-900">
+                  <span>★ VIP BOARDING PASS</span>
+                </span>
+                <span className="font-mono text-[7.5px] text-neutral-500">
+                  {note.orderNumber || (note.id ? `PASS #${note.id.toString().slice(-4).toUpperCase()}` : "TICKET #01")}
+                </span>
+              </div>
+
+              {/* Main Ticket Area: Clear Album Artwork + Flight/Track Metadata */}
+              <div className="flex items-center gap-3">
+                {/* Vivid Album Artwork Frame with Play Button */}
+                <div className="relative w-15 h-15 sm:w-16 sm:h-16 rounded-lg overflow-hidden border border-neutral-800 shadow-sm shrink-0 group bg-neutral-900">
+                  <img
+                    src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
+                    alt={note.songTitle}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleInternalPlay}
+                    className="absolute inset-0 m-auto w-6 h-6 rounded-full bg-neutral-900/90 hover:bg-black text-[#f4efe8] flex items-center justify-center shadow-md transition-transform hover:scale-110 cursor-pointer"
+                    title={isCardPlaying ? "Pause Audio" : "Play Audio"}
+                  >
+                    {isCardPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-0.5" />}
+                  </button>
+                </div>
+
+                {/* Track Details */}
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-serif font-black text-[12px] sm:text-[13px] uppercase tracking-wide text-neutral-900 leading-tight truncate">
+                    {note.songTitle || "FLY ME TO THE MOON / SPACE JAZZ"}
+                  </h3>
+                  <p className="text-[9px] font-mono tracking-widest uppercase text-neutral-600 font-bold truncate mt-0.5">
+                    {note.artistName || "NEIL ARMSTRONG & THE CREW"}
+                  </p>
+                  {note.lyricSnippet && (
+                    <div className="mt-1 p-1 bg-[#e8e2d5] border-l-2 border-neutral-900 text-[8.5px] font-serif italic font-bold tracking-wide leading-tight text-neutral-900 line-clamp-1 break-words">
+                      "{note.lyricSnippet}"
+                    </div>
+                  )}
+                  {note.caption && !note.lyricSnippet && (
+                    <div className="mt-1 text-[8px] leading-tight text-neutral-700 flex items-start gap-1 line-clamp-1">
+                      <Sparkles className="w-2.5 h-2.5 text-neutral-500 shrink-0 mt-0.5" />
+                      <span>"{note.caption}"</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Swiss Metadata Grid + Barcode + Soundwave Indicator */}
+            <div className="pl-4 pr-2 pt-1.5 border-t border-dashed border-neutral-400 flex items-end justify-between">
+              {/* Grid: Hall, Seat, Clip */}
+              <div className="space-y-0.5 text-[7.5px] text-neutral-600 uppercase font-mono">
+                <div className="flex items-center gap-2">
+                  <span>GATE: <strong className="text-neutral-900">F3</strong></span>
+                  <span>SEAT: <strong className="text-neutral-900">21J</strong></span>
+                  <span>CLIP: <strong className="text-neutral-900">{formatTime(audioSnippetStart)} - {formatTime(audioSnippetEnd)}</strong></span>
+                </div>
+                {/* Barcode lines */}
+                <div className="flex items-center gap-0.5 h-3.5 pt-0.5 opacity-85">
+                  {[2, 4, 1, 3, 5, 2, 6, 1, 4, 2, 5, 3, 2, 6, 1, 3, 4, 2, 5, 1, 3].map((w, idx) => (
+                    <div key={idx} className="bg-neutral-900 h-full" style={{ width: `${w % 3 + 1}px` }} />
+                  ))}
+                  <span className="text-[6.5px] font-mono tracking-tighter ml-1">067416-23J</span>
+                </div>
+              </div>
+
+              {/* Soundwaves indicator */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5 h-3 text-neutral-900">
+                  {[3, 7, 12, 16, 11, 6, 14, 18, 10, 5, 12, 8].map((h, i) => (
                     <span 
                       key={i} 
                       className="w-0.5 bg-neutral-800 rounded-full" 
-                      style={{ height: isPlaying ? `${Math.max(4, (h * 1.2) % 18)}px` : `${h}px` }} 
+                      style={{ height: isCardPlaying ? `${Math.max(4, (h * 1.2) % 16)}px` : `${h}px` }} 
                     />
                   ))}
                 </div>
               </div>
-              <span className="text-[7px] tracking-[0.2em] text-neutral-700 font-mono mt-0.5 uppercase font-bold text-center block">
-                THANK YOU FOR LISTENING
-              </span>
             </div>
           </div>
         )}
 
-        {/* TEMPLATE B: CASSETTE TAPE */}
+        {/* TEMPLATE B: CASSETTE TAPE (Memory Anchors Acrylic Tape) */}
         {template === 'CASSETTE' && (
-          <div className="relative w-full h-[225px] bg-[#10202e]/85 backdrop-blur-md text-[#E8EEF0] p-3 rounded-2xl border-2 border-white/15 shadow-[0_12px_32px_rgba(0,0,0,0.6)] font-mono flex flex-col justify-between overflow-hidden">
+          <div className="relative w-full h-[230px] bg-[#101724]/90 backdrop-blur-md text-[#E8EEF0] p-3 rounded-2xl border-2 border-white/20 shadow-[0_16px_36px_rgba(0,0,0,0.65)] font-mono flex flex-col justify-between overflow-hidden">
             {renderStickerSeal()}
 
-            {/* Cassette Screws */}
-            <div className="absolute top-2 left-2 w-1.5 h-1.5 rounded-full bg-slate-500/60 border border-black/40" />
-            <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-slate-500/60 border border-black/40" />
-            <div className="absolute bottom-2 left-2 w-1.5 h-1.5 rounded-full bg-slate-500/60 border border-black/40" />
-            <div className="absolute bottom-2 right-2 w-1.5 h-1.5 rounded-full bg-slate-500/60 border border-black/40" />
+            {/* 4 Precision Metal Screws in Corners */}
+            <div className="absolute top-2 left-2 w-2 h-2 rounded-full bg-slate-400/80 border border-black/40 flex items-center justify-center text-[7px] text-slate-800 font-bold select-none">+</div>
+            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-slate-400/80 border border-black/40 flex items-center justify-center text-[7px] text-slate-800 font-bold select-none">+</div>
+            <div className="absolute bottom-2 left-2 w-2 h-2 rounded-full bg-slate-400/80 border border-black/40 flex items-center justify-center text-[7px] text-slate-800 font-bold select-none">+</div>
+            <div className="absolute bottom-2 right-2 w-2 h-2 rounded-full bg-slate-400/80 border border-black/40 flex items-center justify-center text-[7px] text-slate-800 font-bold select-none">+</div>
 
-            {/* Washi Tape Header */}
-            <div className="relative mx-auto -mt-1 px-4 py-0.5 bg-[#fce5cd]/95 text-neutral-800 -rotate-1 shadow-md border-x-2 border-dashed border-amber-400/80 rounded-sm flex items-center justify-between w-[92%] z-10 pr-14">
-              <span className="text-[9px] font-mono font-bold tracking-widest text-neutral-800">
-                A • {note.orderNumber || (note.id ? `TAPE #${note.id.toString().slice(-4).toUpperCase()}` : "TAPE #01")}
+            {/* Top Washi Tape Header: SAY Ice Blue + Aston Martin Duo-tone Label */}
+            <div className="relative mx-auto -mt-1 px-3 py-1 bg-gradient-to-r from-[#d2e4f5] via-[#bdd9f2] to-[#00594c]/25 text-slate-900 rounded-sm shadow-sm border border-sky-300/40 flex items-center justify-between w-[94%] z-10 pr-12">
+              <span className="text-[9px] font-mono font-bold tracking-widest text-slate-950">
+                MEMORY ANCHORS • VOL.0225
               </span>
-              <span className="text-[8px] font-mono font-bold text-red-700 uppercase">
-                TYPE II CHROME
+              <span className="text-[8px] font-mono font-bold text-[#00594c] uppercase">
+                RUNTIME 33:33
               </span>
             </div>
 
-            {/* Track metadata */}
-            <div className="my-1 px-2.5 py-1.5 bg-[#0a1520]/80 rounded-xl border border-white/10">
-              <h3 className="font-serif italic font-extrabold text-[12px] text-amber-200 tracking-wide truncate">
-                {note.songTitle || "ALBERTO BALSALM TAPE DUB"}
-              </h3>
-              <p className="text-[9px] text-[#91B9C5] font-mono tracking-wider truncate">
-                {note.artistName || "Aphex Twin"}
-              </p>
-              {note.lyricSnippet && (
-                <p className="mt-1 text-[9px] font-serif italic font-bold text-amber-100 tracking-wide leading-tight line-clamp-2 border-l-2 border-amber-300 pl-1.5 break-words">
-                  "{note.lyricSnippet}"
-                </p>
-              )}
-            </div>
-
-            {/* Cassette Spools & Magnetic Tape Window */}
-            <div className="bg-[#060e16]/90 rounded-xl p-1.5 flex items-center justify-around border border-white/10 relative">
-              <div className={`w-7 h-7 rounded-full border-2 border-dashed border-cyan-400/70 flex items-center justify-center ${isPlaying ? 'animate-spin' : ''}`}>
-                <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 shadow-sm" />
-              </div>
-
-              <div className="flex flex-col items-center">
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onPlayToggle(e); }}
-                  className="w-5 h-5 rounded-full bg-amber-500/20 hover:bg-amber-500/40 border border-amber-400/50 flex items-center justify-center text-amber-200 cursor-pointer transition-all mb-0.5"
-                  title={isPlaying ? "Pause Tape" : "Play Tape Snippet"}
-                >
-                  {isPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
-                </button>
-                <span className="text-[7.5px] font-mono tracking-widest text-slate-400">
-                  60 MIN • HI-BIAS
-                </span>
-              </div>
-
-              <div className={`w-7 h-7 rounded-full border-2 border-dashed border-cyan-400/70 flex items-center justify-center ${isPlaying ? 'animate-spin' : ''}`}>
-                <div className="w-2.5 h-2.5 rounded-full bg-cyan-300 shadow-sm" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TEMPLATE C: AIRMAIL STAMP */}
-        {template === 'STAMP' && (
-          <div className="relative w-full h-[225px] bg-[#EFECE6] text-[#1c242c] p-3 rounded-sm border-4 border-double border-[#91B9C5]/60 shadow-xl font-mono flex flex-col justify-between overflow-hidden">
-            {renderStickerSeal()}
-            <div>
-              <div className="flex justify-between items-center text-[8.5px] font-bold tracking-widest uppercase border-b border-neutral-300 pb-0.5 mb-1.5 pr-14">
-                <span>BERGEN AIRMAIL LOG</span>
-                <span className="text-neutral-500 font-mono text-[7.5px]">AIR-POST #42</span>
-              </div>
-
-              <div className="flex gap-2.5 items-center mb-1.5">
-                <div className="w-12 h-12 rounded overflow-hidden shrink-0 shadow border border-neutral-400 relative">
-                  <img
-                    src={note.songImageUrl || "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=300"}
-                    alt={note.songTitle}
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onPlayToggle(e); }}
-                    className="absolute inset-0 bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-colors cursor-pointer"
-                  >
-                    {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
-                  </button>
-                </div>
-                <div className="overflow-hidden flex-1">
-                  <h3 className="font-extrabold text-[11px] uppercase tracking-wide truncate text-neutral-900">
-                    {note.songTitle}
-                  </h3>
-                  <p className="text-[9.5px] text-neutral-700 truncate font-semibold">
-                    {note.artistName}
-                  </p>
-                  <p className="text-[8px] text-neutral-500 uppercase mt-0.5">
-                    CLIP: {formatTime(note.audioSnippetStart || '0:10')} - {formatTime(note.audioSnippetEnd || '0:40')}
-                  </p>
-                </div>
-              </div>
-
-              {note.lyricSnippet && (
-                <div className="p-1.5 bg-[#e4dfd7] border-l-2 border-[#91B9C5] text-[9.5px] font-serif italic text-neutral-800 line-clamp-2 break-words">
-                  "{note.lyricSnippet}"
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-end border-t border-dashed border-neutral-300 pt-1 text-[8px] text-neutral-600">
-              <span>POSTAGE PAID • PAR AVION</span>
-              <span className="font-bold tracking-wider text-cyan-800">SAY AIRMAIL</span>
-            </div>
-          </div>
-        )}
-
-        {/* TEMPLATE D: VINYL RECORD */}
-        {template === 'VINYL' && (
-          <div className="relative w-full h-[225px] bg-[#071421]/80 text-[#E8EEF0] p-3 rounded-2xl border border-white/[0.08] shadow-[0_12px_32px_rgba(0,0,0,0.45)] font-mono flex flex-col justify-between overflow-hidden">
-            {renderStickerSeal()}
-
-            <div className="flex justify-between items-center text-[8.5px] text-[#A59CB5] uppercase tracking-widest pb-0.5 border-b border-white/[0.08] pr-14">
-              <span>ANALOG MICROGROOVE • 33 RPM</span>
-              <span className="text-[#B39DDB] font-bold">ANALOG</span>
-            </div>
-
-            <div className="flex items-center gap-3 my-1">
-              <div className={`w-14 h-14 rounded-full overflow-hidden border-2 border-neutral-700 shadow-xl shrink-0 relative bg-black ${isPlaying ? 'animate-spin-slow' : ''}`}>
-                <div className="absolute inset-1 rounded-full border border-neutral-800" />
-                <div className="absolute inset-2.5 rounded-full border border-neutral-700/60" />
+            {/* Track Metadata with Clear Album Artwork & Lyric Quote */}
+            <div className="my-1 px-2.5 py-1.5 bg-[#081522]/95 rounded-xl border border-sky-400/30 flex items-center gap-2.5">
+              {/* Square Album Cover on Cassette Label */}
+              <div className="w-13 h-13 rounded-lg overflow-hidden border border-sky-400/50 shrink-0 shadow-md relative group">
                 <img
                   src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
                   alt={note.songTitle}
-                  className="w-full h-full object-cover rounded-full opacity-70"
+                  className="w-full h-full object-cover"
                 />
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onPlayToggle(e); }}
-                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#E8EEF0] text-black border border-black flex items-center justify-center hover:scale-110 transition-transform cursor-pointer"
-                  title={isPlaying ? "Pause Vinyl" : "Play Vinyl"}
-                >
-                  {isPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
-                </button>
               </div>
-
-              <div className="overflow-hidden flex-1">
-                <h3 className="font-extrabold text-[11px] text-[#E8EEF0] uppercase tracking-wider truncate">
-                  {note.songTitle}
+              <div className="min-w-0 flex-1">
+                <h3 className="font-serif italic font-bold text-[12px] sm:text-[13px] text-sky-200 tracking-wide truncate">
+                  {note.songTitle || "ALBERTO BALSALM TAPE DUB"}
                 </h3>
-                <p className="text-[9.5px] text-[#A59CB5] truncate">
-                  {note.artistName}
+                <p className="text-[9.5px] text-[#91B9C5] font-mono tracking-wider truncate font-semibold">
+                  {note.artistName || "Aphex Twin"}
                 </p>
-                <span className="text-[8px] text-[#B39DDB]/90 font-mono mt-0.5 inline-block">
-                  CLIP: {formatTime(note.audioSnippetStart || '0:10')} - {formatTime(note.audioSnippetEnd || '0:40')}
-                </span>
+                {note.lyricSnippet && (
+                  <p className="mt-0.5 text-[8.5px] font-serif italic font-bold text-sky-100 tracking-wide leading-tight line-clamp-1 border-l-2 border-sky-400 pl-1 break-words">
+                    "{note.lyricSnippet}"
+                  </p>
+                )}
               </div>
             </div>
 
-            {note.lyricSnippet && (
-              <div className="p-1.5 rounded-lg bg-[#050e18]/80 border border-white/[0.06] border-l-3 border-l-[#B39DDB] text-[9.5px] font-serif italic text-purple-100 leading-tight tracking-wide line-clamp-2 break-words">
-                "{note.lyricSnippet}"
+            {/* Cassette Mechanical Spool Window & Magnetic Tape */}
+            <div className="bg-[#040c14]/95 rounded-xl p-2 flex items-center justify-around border border-sky-500/20 relative">
+              {/* Left Spool */}
+              <div className={`w-8 h-8 rounded-full border-2 border-dashed border-sky-400/50 flex items-center justify-center bg-white/10 ${isCardPlaying ? 'animate-spin' : ''}`}>
+                <div className="w-3 h-3 rounded-full bg-white flex items-center justify-center">
+                  <div className="w-1 h-1 rounded-full bg-neutral-900" />
+                </div>
               </div>
-            )}
+
+              {/* Center Magnetic Tape Strip + Tactile Ice Blue Play Button */}
+              <div className="flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={handleInternalPlay}
+                  className="w-6 h-6 rounded-full bg-sky-400 hover:bg-sky-300 text-slate-950 flex items-center justify-center font-bold cursor-pointer transition-all shadow-md mb-0.5"
+                  title={isCardPlaying ? "Pause Tape" : "Play Tape Snippet"}
+                >
+                  {isCardPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-0.5" />}
+                </button>
+                <span className="text-[7px] font-mono tracking-widest text-sky-300 uppercase">
+                  TYPE II CHROME • 60 MIN
+                </span>
+              </div>
+
+              {/* Right Spool */}
+              <div className={`w-8 h-8 rounded-full border-2 border-dashed border-sky-400/50 flex items-center justify-center bg-white/10 ${isCardPlaying ? 'animate-spin' : ''}`}>
+                <div className="w-3 h-3 rounded-full bg-white flex items-center justify-center">
+                  <div className="w-1 h-1 rounded-full bg-neutral-900" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TEMPLATE C: AIRMAIL POSTAGE STAMP & CINEMA PASS */}
+        {template === 'STAMP' && (
+          <div className="relative w-full h-[230px] bg-[#f5f2eb] text-[#141619] p-3 font-mono shadow-[0_16px_36px_rgba(0,0,0,0.65)] rounded-lg border-2 border-dashed border-[#b8ae9c] flex flex-col justify-between overflow-hidden">
+            {renderStickerSeal()}
+
+            {/* Scalloped Perforated Edge Notches (Circular cutouts) */}
+            <div className="absolute -left-2 top-0 bottom-0 flex flex-col justify-between py-2 pointer-events-none">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="w-3.5 h-3.5 rounded-full bg-[#0a101b] border border-black/30" />
+              ))}
+            </div>
+            <div className="absolute -right-2 top-0 bottom-0 flex flex-col justify-between py-2 pointer-events-none">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="w-3.5 h-3.5 rounded-full bg-[#0a101b] border border-black/30" />
+              ))}
+            </div>
+
+            {/* Inner Header */}
+            <div className="pl-3 pr-12 flex items-center justify-between border-b border-neutral-400/80 pb-1 text-[8px] font-bold tracking-widest uppercase text-neutral-700">
+              <span className="flex items-center gap-1.5 text-neutral-900">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00594c]" />
+                <span>SAY AIRMAIL • POSTAGE 33¢</span>
+              </span>
+              <span className="font-mono text-[7.5px] text-neutral-600">
+                PAR AVION
+              </span>
+            </div>
+
+            {/* Middle: Prominent Stamp Artwork Frame + Track Info */}
+            <div className="pl-3 pr-2 flex items-center gap-3 my-auto">
+              {/* Rare Postage Stamp Frame */}
+              <div className="relative w-18 h-18 sm:w-20 sm:h-20 rounded-sm bg-white p-1 border border-neutral-400 shadow-md shrink-0 flex items-center justify-center overflow-hidden group">
+                <img
+                  src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
+                  alt={note.songTitle}
+                  className="w-full h-full object-cover rounded-2xs"
+                />
+                {/* Circular Postmark Cancellation Ring */}
+                <div className="absolute inset-0 border border-neutral-800/40 rounded-full scale-110 pointer-events-none" />
+                <button
+                  type="button"
+                  onClick={handleInternalPlay}
+                  className="absolute inset-0 bg-black/40 hover:bg-black/60 flex items-center justify-center text-white transition-all cursor-pointer opacity-90 group-hover:opacity-100"
+                  title={isCardPlaying ? "Pause Audio" : "Play Audio"}
+                >
+                  {isCardPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                </button>
+              </div>
+
+              {/* Title, Artist, and Lyric */}
+              <div className="min-w-0 flex-1">
+                <h3 className="font-serif font-black text-[12.5px] uppercase tracking-wide text-neutral-900 leading-tight truncate">
+                  {note.songTitle || "COHERENCE / MIDNIGHT SOUND"}
+                </h3>
+                <p className="text-[9.5px] font-mono tracking-wider uppercase text-neutral-600 font-bold truncate mt-0.5">
+                  {note.artistName || "James Ward Byrkit"}
+                </p>
+                {note.lyricSnippet && (
+                  <p className="mt-1 text-[8.5px] font-serif italic text-neutral-800 line-clamp-2 border-l-2 border-neutral-900 pl-1.5 leading-snug">
+                    "{note.lyricSnippet}"
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Dotted Cinema / Airmail Grid */}
+            <div className="pl-3 pr-2 border-t border-dashed border-neutral-400 pt-1 flex items-center justify-between text-[7.5px] text-neutral-600 uppercase font-mono">
+              <div className="flex items-center gap-2">
+                <span>HALL: <strong className="text-neutral-900">05</strong></span>
+                <span>SEAT: <strong className="text-neutral-900">06-10</strong></span>
+                <span>PRICE: <strong className="text-neutral-900">33.3</strong></span>
+              </div>
+              <div className="flex items-center gap-1 text-neutral-800 font-bold">
+                <span>CLIP: {formatTime(audioSnippetStart)} - {formatTime(audioSnippetEnd)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TEMPLATE D: CONCERT VINYL RECORD & SLIDING ALBUM JACKET */}
+        {template === 'VINYL' && (
+          <div className="relative w-full h-[230px] bg-gradient-to-br from-[#0c1e33] via-[#081827] to-[#040e18] text-[#E8EEF0] p-3 rounded-2xl border border-sky-400/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] font-mono flex flex-col justify-between overflow-hidden group">
+            {renderStickerSeal()}
+
+            {/* Ambient Petrol & Aston Martin Teal Lighting */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(0,89,76,0.3)_0%,transparent_60%)] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(56,189,248,0.15)_0%,transparent_50%)] pointer-events-none" />
+
+            {/* Top Bar: Audiophile Vinyl Header */}
+            <div className="relative z-10 flex items-center justify-between border-b border-sky-500/20 pb-1.5 pr-14 text-[9px] font-mono tracking-wider">
+              <div className="flex items-center gap-1.5 text-sky-300">
+                <Disc3 className={`w-3.5 h-3.5 text-sky-400 ${isCardPlaying ? 'animate-spin-slow' : ''}`} />
+                <span className="font-bold uppercase tracking-widest text-sky-100 text-[9.5px]">CONCERT VINYL • 33⅓ RPM</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold border transition-colors ${
+                isCardPlaying 
+                  ? 'bg-sky-950/80 text-sky-300 border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.3)]' 
+                  : 'bg-[#081b2d] text-sky-400/80 border-sky-500/30'
+              }`}>
+                {isCardPlaying ? 'PLAYING 33 RPM' : 'STEREO ANALOG'}
+              </span>
+            </div>
+
+            {/* Center Area: Half Vinyl Disc Emerging Gracefully from Behind Album Jacket */}
+            <div className="relative z-10 my-auto flex items-center gap-1 px-1">
+              
+              {/* Part 1: Square Gatefold Album Jacket (Front - z-20) - 100% Clear Artwork */}
+              <div 
+                onClick={handleInternalPlay}
+                className="relative w-[132px] sm:w-[142px] h-[132px] sm:h-[142px] rounded-xl overflow-hidden bg-[#071421] border border-sky-400/40 shadow-[10px_0_25px_rgba(0,0,0,0.85)] shrink-0 z-20 cursor-pointer group/jacket transition-transform duration-300 hover:scale-[1.02]"
+              >
+                {/* Jacket Cover Art Texture */}
+                <img
+                  src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
+                  alt={note.songTitle}
+                  className="absolute inset-0 w-full h-full object-cover rounded-xl transition-transform duration-500 group-hover/jacket:scale-105"
+                />
+                {/* Subtle protective sleeve sheen */}
+                <div className="absolute inset-0 bg-gradient-to-tr from-black/25 via-transparent to-white/10 pointer-events-none rounded-xl" />
+                
+                {/* Jacket Spine Info */}
+                <div className="absolute top-1.5 left-1.5 right-1.5 z-10 flex items-center justify-between text-[7px] text-sky-200 font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-md bg-[#05101a]/80 border border-sky-400/30 backdrop-blur-xs">
+                  <span>SAY VINYL</span>
+                  <span className="text-white">STEREO</span>
+                </div>
+              </div>
+
+              {/* Part 2: The Physical 12" Vinyl Disc - 50% Tucked Behind Jacket Sleeve, 50% Visible & Spinning */}
+              <div 
+                onClick={handleInternalPlay}
+                className="relative z-10 -ml-16 sm:-ml-18 w-[128px] sm:w-[136px] h-[128px] sm:h-[136px] rounded-full shrink-0 flex items-center justify-center cursor-pointer group/disc"
+                title="Click vinyl to play / pause snippet"
+              >
+                <div 
+                  className={`relative w-full h-full rounded-full border border-neutral-700/80 shadow-[0_12px_30px_rgba(0,0,0,0.95)] flex items-center justify-center transition-transform hover:scale-105 ${
+                    isCardPlaying ? 'animate-spin-slow' : ''
+                  }`}
+                  style={{
+                    background: 'radial-gradient(circle, #0e1724 0%, #06090e 28%, #162436 44%, #05080e 58%, #121c2c 74%, #030508 100%)',
+                    boxShadow: '0 8px 28px rgba(0,0,0,0.9), inset 0 0 10px rgba(255,255,255,0.08), inset 0 0 20px rgba(56,189,248,0.15)'
+                  }}
+                >
+                  {/* Etched Vinyl Microgrooves */}
+                  <div className="absolute inset-2 rounded-full border border-white/[0.07] pointer-events-none" />
+                  <div className="absolute inset-4 rounded-full border border-white/[0.09] pointer-events-none" />
+                  <div className="absolute inset-6 rounded-full border border-white/[0.07] pointer-events-none" />
+                  <div className="absolute inset-8 rounded-full border border-white/[0.09] pointer-events-none" />
+
+                  {/* Vinyl Radial Light Sheen */}
+                  <div 
+                    className="absolute inset-0 rounded-full pointer-events-none opacity-25"
+                    style={{
+                      background: 'conic-gradient(from 0deg, transparent 0deg, rgba(255,255,255,0.3) 45deg, transparent 90deg, rgba(255,255,255,0.3) 135deg, transparent 180deg, rgba(255,255,255,0.3) 225deg, transparent 270deg, rgba(255,255,255,0.3) 315deg, transparent 360deg)'
+                    }}
+                  />
+
+                  {/* Center Paper Spindle Label */}
+                  <div className="relative w-11 h-11 rounded-full overflow-hidden border border-sky-400/60 shadow-inner flex items-center justify-center p-0.5 bg-[#081c2e]">
+                    <img
+                      src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
+                      alt="Spindle label"
+                      className="w-full h-full object-cover rounded-full"
+                    />
+                    
+                    {/* Spindle Center Hole + Tactile Play Button */}
+                    <button
+                      type="button"
+                      onClick={handleInternalPlay}
+                      className="absolute inset-0 m-auto w-5.5 h-5.5 rounded-full bg-sky-400 hover:bg-sky-300 text-slate-950 flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer z-30"
+                      title={isCardPlaying ? "Pause Vinyl" : "Play Vinyl"}
+                    >
+                      {isCardPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Part 3: Audiophile Track Metadata Sheet (Right) */}
+              <div className="relative z-10 flex-1 min-w-0 pl-2 sm:pl-3 flex flex-col justify-center text-left">
+                <div className="flex items-center gap-1.5 text-[8px] text-sky-400 font-mono tracking-wider">
+                  <span className={`w-1.5 h-1.5 rounded-full ${isCardPlaying ? 'bg-emerald-400 animate-pulse' : 'bg-sky-500'}`} />
+                  <span className="font-bold uppercase">{isCardPlaying ? 'NOW SPINNING' : 'ANALOG 33⅓'}</span>
+                </div>
+                <h3 className="font-serif font-black text-[12px] sm:text-[13px] uppercase tracking-wide text-white leading-tight truncate mt-1">
+                  {note.songTitle || "UNTITLED TRACK"}
+                </h3>
+                <p className="text-[9.5px] font-mono tracking-wider text-sky-300 font-bold truncate mt-0.5">
+                  {note.artistName || "Artist Name"}
+                </p>
+                {note.lyricSnippet && (
+                  <p className="mt-1 text-[8px] font-serif italic text-slate-300 line-clamp-2 border-l-2 border-sky-400/60 pl-1.5 leading-snug">
+                    "{note.lyricSnippet}"
+                  </p>
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleInternalPlay}
+                    className="px-2 py-0.5 rounded-md bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/50 text-sky-200 text-[8px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    {isCardPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current" />}
+                    <span>{isCardPlaying ? 'PAUSE' : 'PLAY CLIP'}</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Bottom Bar: Needle / Clip Info & Audio Fidelity Tag */}
+            <div className="relative z-10 flex items-center justify-between border-t border-sky-500/20 pt-1 text-[8.5px] font-mono text-sky-400/90">
+              <div className="flex items-center gap-1.5 text-sky-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00594c] shadow-[0_0_6px_rgba(0,89,76,0.9)]" />
+                <span>CLIP: {formatTime(audioSnippetStart)} - {formatTime(audioSnippetEnd)}</span>
+              </div>
+              <span className="tracking-widest uppercase text-sky-300 font-bold">
+                HIGH FIDELITY • SAY TACTILE
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* TEMPLATE E: CELESTIAL STAR-BELT & 3D OBLIQUE ORBITAL PLANE */}
+        {template === 'GALAXY' && (
+          <div 
+            onClick={handleInternalPlay}
+            className="relative w-full h-[230px] bg-gradient-to-b from-[#051220] via-[#030b14] to-[#01050a] text-[#E8EEF0] p-3 rounded-2xl border border-sky-400/35 shadow-[0_20px_45px_rgba(0,0,0,0.9)] font-mono flex flex-col justify-between overflow-hidden cursor-pointer select-none group"
+            title="Click cosmic star-belt to play / pause snippet"
+          >
+            {renderStickerSeal()}
+
+            {/* Cosmic Starfield & Nebula Glows */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(56,189,248,0.14)_0%,transparent_70%)] pointer-events-none" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(0,89,76,0.3)_0%,transparent_55%)] pointer-events-none" />
+            <div className="absolute top-3 left-8 w-1 h-1 rounded-full bg-cyan-200/90 shadow-[0_0_6px_rgba(56,189,248,1)] animate-ping pointer-events-none" />
+            <div className="absolute top-10 right-20 w-1.5 h-1.5 rounded-full bg-sky-200/80 pointer-events-none" />
+            <div className="absolute bottom-6 left-12 w-1 h-1 rounded-full bg-amber-200/90 shadow-[0_0_6px_rgba(251,191,36,0.8)] pointer-events-none" />
+
+            {/* Top Header: Cosmic Orbit Coordinates */}
+            <div className="relative z-20 flex items-center justify-between border-b border-sky-500/20 pb-1.5 pr-14 text-[9px] font-mono tracking-wider">
+              <div className="flex items-center gap-1.5 text-cyan-300">
+                <Orbit className={`w-3.5 h-3.5 text-cyan-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.9)] ${isCardPlaying ? 'animate-spin-slow' : ''}`} />
+                <span className="font-bold uppercase tracking-widest text-sky-100 text-[9.5px]">CELESTIAL STAR-BELT • GALAXY</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded-full text-[8px] font-bold border transition-colors ${
+                isCardPlaying 
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-400/60 shadow-[0_0_8px_rgba(251,191,36,0.4)]' 
+                  : 'bg-[#081b2d] text-cyan-300/90 border-cyan-500/40'
+              }`}>
+                {isCardPlaying ? 'ORBIT EXPEDITION' : 'DEEP SPACE SYNC'}
+              </span>
+            </div>
+
+            {/* Main Cosmic Stage: 3D Oblique Star-Belt & Tilted Orbital Plane (Zero Obscuring Cards) */}
+            <div className="relative z-10 w-full h-[145px] flex items-center justify-center overflow-hidden [perspective:850px]">
+              
+              {/* 1. Diagonal Milky Way Stardust Lane (Dãy sao ngân hà xéo) */}
+              <div 
+                className="absolute w-[360px] h-[70px] -rotate-15 pointer-events-none opacity-45 blur-lg"
+                style={{
+                  background: 'radial-gradient(ellipse at center, rgba(56,189,248,0.3) 0%, rgba(99,102,241,0.18) 45%, transparent 75%)'
+                }}
+              />
+              <div 
+                className="absolute w-[300px] h-[1.5px] -rotate-15 pointer-events-none opacity-60"
+                style={{
+                  background: 'linear-gradient(90deg, transparent 0%, rgba(186,230,253,0.85) 50%, transparent 100%)'
+                }}
+              />
+
+              {/* Twinkling Stardust Constellations along the belt */}
+              <div className="absolute top-5 left-14 w-1.5 h-1.5 rounded-full bg-cyan-200 shadow-[0_0_8px_rgba(56,189,248,0.9)] animate-pulse pointer-events-none" />
+              <div className="absolute bottom-5 right-16 w-1.5 h-1.5 rounded-full bg-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.9)] animate-ping pointer-events-none" />
+              <div className="absolute top-8 right-28 w-1 h-1 rounded-full bg-white/90 pointer-events-none" />
+              <div className="absolute bottom-8 left-24 w-1 h-1 rounded-full bg-purple-300/90 pointer-events-none" />
+
+              {/* 2. 3D Tilted Orbital Plane (Góc nhìn xéo nghệ thuật, không giống đĩa phẳng) */}
+              <div 
+                className="relative w-[320px] h-[320px] flex items-center justify-center pointer-events-none"
+                style={{
+                  transform: 'rotateX(68deg) rotateZ(-22deg)',
+                  transformStyle: 'preserve-3d',
+                }}
+              >
+                {/* Concentric Elliptical Orbit Rings Revolving in 3D */}
+                <div className={`relative w-full h-full flex items-center justify-center ${isCardPlaying ? 'animate-spin-slow' : ''}`}>
+                  
+                  {/* Outer Orbit (Neptune Orbit) */}
+                  <div className="absolute w-[295px] h-[295px] rounded-full border border-sky-400/25 shadow-[0_0_12px_rgba(56,189,248,0.15)]" />
+                  {/* Neptune Planet */}
+                  <div className="absolute top-[28px] left-[70px] w-3 h-3 rounded-full bg-gradient-to-tr from-teal-400 to-sky-300 shadow-[0_0_10px_rgba(45,212,191,0.9)] ring-1 ring-white/60" />
+
+                  {/* Orbit 4 (Saturn with Ring) */}
+                  <div className="absolute w-[235px] h-[235px] rounded-full border border-amber-400/25 shadow-[0_0_10px_rgba(251,191,36,0.12)]" />
+                  {/* Saturn Planet with Ring */}
+                  <div className="absolute bottom-[36px] right-[48px] flex items-center justify-center">
+                    <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-200 via-amber-400 to-yellow-600 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+                    <div className="absolute w-6 h-2 border border-amber-300 rounded-full -rotate-12 pointer-events-none" />
+                  </div>
+
+                  {/* Orbit 3 (Jupiter) */}
+                  <div className="absolute w-[180px] h-[180px] rounded-full border border-sky-300/25 shadow-[0_0_8px_rgba(56,189,248,0.1)]" />
+                  {/* Jupiter Planet */}
+                  <div className="absolute top-[38px] right-[45px] w-4 h-4 rounded-full bg-gradient-to-tr from-amber-700 via-orange-400 to-amber-200 shadow-[0_0_10px_rgba(245,158,11,0.8)] ring-1 ring-amber-300/50" />
+
+                  {/* Orbit 2 (Earth + Moon) */}
+                  <div className="absolute w-[130px] h-[130px] rounded-full border border-teal-400/30 shadow-[0_0_8px_rgba(20,184,166,0.15)]" />
+                  {/* Earth + Moon */}
+                  <div className="absolute bottom-[18px] left-[30px] flex items-center">
+                    <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-[#00594c] via-sky-400 to-sky-200 shadow-[0_0_10px_rgba(56,189,248,1)] ring-1 ring-white/80" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-slate-200 ml-0.5 shadow-sm" />
+                  </div>
+
+                  {/* Orbit 1 (Mars) */}
+                  <div className="absolute w-[90px] h-[90px] rounded-full border border-rose-400/30" />
+                  {/* Mars Planet */}
+                  <div className="absolute top-[14px] left-[28px] w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-rose-600 to-red-400 shadow-[0_0_8px_rgba(244,63,94,0.9)]" />
+
+                </div>
+              </div>
+
+              {/* 3. Upright Central Solar Star (Sun / Galactic Core facing viewer) */}
+              <div 
+                onClick={handleInternalPlay}
+                className="absolute z-20 w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 via-orange-400 to-yellow-200 shadow-[0_0_28px_rgba(251,146,60,0.95)] border-2 border-amber-300 flex items-center justify-center cursor-pointer group/sun hover:scale-110 transition-transform"
+                title={isCardPlaying ? "Pause Cosmic Orbit" : "Play Cosmic Orbit"}
+              >
+                <img
+                  src={note.songImageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500"}
+                  alt="Solar core"
+                  className="w-full h-full object-cover rounded-full"
+                />
+                {/* Center Solar Tactile Play Button */}
+                <button
+                  type="button"
+                  onClick={handleInternalPlay}
+                  className="absolute inset-0 m-auto w-6 h-6 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center shadow-lg transition-transform hover:scale-115 cursor-pointer z-30"
+                  title={isCardPlaying ? "Pause Cosmic Orbit" : "Play Cosmic Orbit"}
+                >
+                  {isCardPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-0.5" />}
+                </button>
+              </div>
+
+            </div>
+
+            {/* Bottom Bar: Clean Single-Line Audiophile Ticker (Zero Screen Blockage) */}
+            <div className="relative z-20 flex items-center justify-between border-t border-sky-500/20 pt-1.5 text-[8.5px] font-mono text-sky-400">
+              <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)] shrink-0 animate-pulse" />
+                <span className="font-serif font-black text-[10.5px] uppercase tracking-wide text-white truncate drop-shadow-sm">
+                  {note.songTitle || "UNTITLED TRACK"}
+                </span>
+                <span className="text-sky-300 font-bold truncate">
+                  • {note.artistName || "Artist"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 font-bold">
+                <span className="text-amber-200">⏱️ {formatTime(audioSnippetStart)} - {formatTime(audioSnippetEnd)}</span>
+                <span className="text-sky-300 tracking-wider uppercase hidden sm:inline">
+                  • {note.emotionTag || "Cosmic"}
+                </span>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -578,7 +944,7 @@ export default function MusicNoteCard({
             type="button"
             onClick={handleSave}
             className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
-              isSaved ? 'text-amber-300 bg-amber-950/40' : 'text-[#A59CB5]/80 hover:text-white hover:bg-white/[0.05]'
+              isSaved ? 'text-sky-300 bg-sky-950/70 border border-sky-400/40' : 'text-[#91B9C5]/80 hover:text-white hover:bg-white/[0.05]'
             }`}
             title={isSaved ? "Saved" : "Save to Vault"}
           >
@@ -592,15 +958,15 @@ export default function MusicNoteCard({
           onClick={() => setShowReplyInput(!showReplyInput)}
           className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-mono transition-all cursor-pointer ${
             showReplyInput 
-              ? 'bg-violet-600/25 text-violet-200 border border-violet-400/50 shadow-sm shadow-violet-950/50' 
-              : 'bg-white/[0.04] text-[#A59CB5] hover:text-white border border-white/[0.08]'
+              ? 'bg-sky-500/20 text-sky-200 border border-sky-400/50 shadow-sm shadow-sky-950/50' 
+              : 'bg-white/[0.04] text-[#91B9C5] hover:text-white border border-white/[0.08]'
           }`}
           title="Reply with song dialogue"
         >
           <MessageSquare className="w-3.5 h-3.5" />
           <span className="text-[11px] font-bold">Reply with Song</span>
           {replies.length > 0 && (
-            <span className="text-[9.5px] px-1.5 rounded-full bg-violet-950/80 text-violet-300 border border-violet-500/30">
+            <span className="text-[9.5px] px-1.5 rounded-full bg-sky-950/90 text-sky-300 border border-sky-400/40">
               {replies.length}
             </span>
           )}
@@ -616,7 +982,7 @@ export default function MusicNoteCard({
               placeholder="Song title for your reply..."
               value={replySongTitle}
               onChange={(e) => setReplySongTitle(e.target.value)}
-              className="w-full bg-black/40 border border-white/[0.08] rounded-lg px-2.5 py-1 text-xs text-[#F3F0F9] focus:outline-none focus:border-violet-400 placeholder:text-neutral-500 font-mono"
+              className="w-full bg-[#05101a] border border-sky-500/25 rounded-lg px-2.5 py-1 text-xs text-[#E8EEF0] focus:outline-none focus:border-sky-400 placeholder:text-slate-500 font-mono"
             />
             <div className="flex gap-1.5">
               <input
@@ -624,11 +990,11 @@ export default function MusicNoteCard({
                 placeholder="Write your dialogue note..."
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
-                className="flex-1 bg-black/40 border border-white/[0.08] rounded-lg px-2.5 py-1 text-xs text-[#F3F0F9] focus:outline-none focus:border-violet-400 placeholder:text-neutral-500 font-mono"
+                className="flex-1 bg-[#05101a] border border-sky-500/25 rounded-lg px-2.5 py-1 text-xs text-[#E8EEF0] focus:outline-none focus:border-sky-400 placeholder:text-slate-500 font-mono"
               />
               <button
                 type="submit"
-                className="px-3.5 py-1 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-mono text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-md"
+                className="px-3.5 py-1 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-slate-950 font-mono text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-md"
               >
                 Send
               </button>
@@ -639,10 +1005,10 @@ export default function MusicNoteCard({
           {replies.length > 0 && (
             <div className="max-h-24 overflow-y-auto space-y-1 pr-1 scrollbar-none">
               {replies.map(r => (
-                <div key={r.id} className="p-1.5 rounded-lg bg-black/30 border border-white/[0.05] text-[10px] font-mono">
-                  <span className="text-violet-300 font-bold">{r.author}: </span>
-                  <span className="text-amber-200">"{r.song}"</span>
-                  <span className="text-neutral-400 block truncate mt-0.5">{r.caption}</span>
+                <div key={r.id} className="p-1.5 rounded-lg bg-[#07131e] border border-sky-500/15 text-[10px] font-mono">
+                  <span className="text-sky-300 font-bold">{r.author}: </span>
+                  <span className="text-sky-100 font-semibold">"{r.song}"</span>
+                  <span className="text-slate-300 block truncate mt-0.5">{r.caption}</span>
                 </div>
               ))}
             </div>

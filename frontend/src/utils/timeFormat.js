@@ -53,32 +53,36 @@ export function formatTimeDetails(dateStr) {
     year: 'numeric'
   });
 
+  // Calculate calendar day difference using local midnight
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const calendarDiffDays = Math.max(0, Math.round((nowMidnight - dMidnight) / (1000 * 60 * 60 * 24)));
+
   // Calculate elapsed time
   const diffMs = now.getTime() - d.getTime();
   const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
   const diffMins = Math.floor(diffSecs / 60);
   const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  const isToday = diffDays < 1;
+  const isToday = calendarDiffDays === 0;
 
   let relative = '';
   let compact = '';
 
-  if (diffDays >= 1) {
-    // If 1 or more days have elapsed: show date + time + relative days
-    relative = diffDays === 1 ? 'Yesterday' : `${diffDays}d ago`;
-    compact = `${date} • ${time} (${relative})`;
-  } else if (diffHours >= 1) {
-    // Within today, 1+ hours: show countdown hours
-    relative = `${diffHours}h ago`;
-    compact = `${diffHours}h ago`;
-  } else if (diffMins >= 1) {
-    // Within the hour: show countdown minutes
-    relative = `${diffMins}m ago`;
-    compact = `${diffMins}m ago`;
+  if (calendarDiffDays === 0) {
+    if (diffHours >= 1) {
+      relative = `${diffHours}h ago`;
+    } else if (diffMins >= 1) {
+      relative = `${diffMins}m ago`;
+    } else {
+      relative = 'Just now';
+    }
+    compact = `${relative} • ${time}`;
+  } else if (calendarDiffDays === 1) {
+    relative = 'Yesterday';
+    compact = `Yesterday • ${time}`;
   } else {
-    relative = 'Just now';
-    compact = 'Just now';
+    relative = `${calendarDiffDays}d ago`;
+    compact = `${date} • ${time}`;
   }
 
   return {
@@ -86,8 +90,8 @@ export function formatTimeDetails(dateStr) {
     time,
     relative,
     compact,
-    full: compact,
-    diffDays,
+    full: `${date} • ${time} (${relative})`,
+    diffDays: calendarDiffDays,
     diffHours,
     diffMins,
     isToday
