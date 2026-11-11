@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class NoteService implements INoteService {
 
-    private static final Set<String> VALID_TEMPLATES = Set.of("RECEIPTIFY", "CASSETTE", "STAMP", "VINYL");
+    private static final Set<String> VALID_TEMPLATES = Set.of("RECEIPTIFY", "CASSETTE", "STAMP", "VINYL", "GALAXY");
     private static final Set<String> VALID_VISIBILITY = Set.of("PUBLIC", "FRIENDS_ONLY");
 
     private final INoteRepository noteRepository;
@@ -63,8 +63,16 @@ public class NoteService implements INoteService {
                 cleanTemplate = base;
             }
 
-            if (request.getVisibility() != null && !VALID_VISIBILITY.contains(request.getVisibility().toUpperCase())) {
-                throw new BadRequestException("Invalid visibility type: " + request.getVisibility());
+            String cleanVisibility = "PUBLIC";
+            if (request.getVisibility() != null && !request.getVisibility().isBlank()) {
+                String upperVis = request.getVisibility().toUpperCase().trim();
+                if ("FRIENDS".equals(upperVis) || "FRIENDS_ONLY".equals(upperVis)) {
+                    cleanVisibility = "FRIENDS_ONLY";
+                } else if ("PUBLIC".equals(upperVis)) {
+                    cleanVisibility = "PUBLIC";
+                } else {
+                    throw new BadRequestException("Invalid visibility type: " + request.getVisibility());
+                }
             }
 
             UUID userUuid;
@@ -98,7 +106,7 @@ public class NoteService implements INoteService {
                     .templateType(cleanTemplate)
                     .emotionTag(request.getEmotionTag())
                     .stickerBadge(request.getStickerBadge())
-                    .visibility(request.getVisibility() != null ? request.getVisibility().toUpperCase() : "PUBLIC")
+                    .visibility(cleanVisibility)
                     .build();
 
             Note savedNote = noteRepository.save(note);
@@ -155,7 +163,7 @@ public class NoteService implements INoteService {
             List<UUID> friendIds = friendshipRepository.findAcceptedFriendUserIds(currentUserId);
             List<Note> feedNotes;
             if (friendIds.isEmpty()) {
-                feedNotes = noteRepository.findByVisibilityOrderByCreatedAtDesc("PUBLIC");
+                feedNotes = noteRepository.findFeedNotesWithoutFriends(currentUserId);
             } else {
                 feedNotes = noteRepository.findFeedNotes(currentUserId, friendIds);
             }

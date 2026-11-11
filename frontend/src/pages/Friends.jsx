@@ -43,14 +43,39 @@ export default function Friends() {
   // View friend profile modal state
   const [viewingProfileFriend, setViewingProfileFriend] = useState(null);
 
-  // 1. Fetch Friends Feed
+  // 1. Fetch Friends Feed (combining circle feed + user's own friends-only and public notes)
   const loadFriendsFeed = async () => {
     setIsLoadingFeed(true);
     try {
       if (user?.id) {
-        const res = await noteService.getFriendsFeed(user.id);
-        const notes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
-        setFriendsNotes(notes);
+        const [friendsFeedRes, userNotesRes] = await Promise.allSettled([
+          noteService.getFriendsFeed(user.id),
+          noteService.getUserNotes(user.id),
+        ]);
+
+        const rawFriends = friendsFeedRes.status === 'fulfilled'
+          ? (Array.isArray(friendsFeedRes.value) ? friendsFeedRes.value : (friendsFeedRes.value?.data?.data || friendsFeedRes.value?.data || []))
+          : [];
+
+        const rawUserNotes = userNotesRes.status === 'fulfilled'
+          ? (Array.isArray(userNotesRes.value) ? userNotesRes.value : (userNotesRes.value?.data?.data || userNotesRes.value?.data || []))
+          : [];
+
+        // Ensure user's own notes (especially Friends-only) are included in their Friends feed
+        const myNotes = rawUserNotes.filter((n) => {
+          const vis = (n.visibility || 'PUBLIC').toUpperCase();
+          return vis === 'FRIENDS' || vis === 'FRIENDS_ONLY' || vis === 'PUBLIC';
+        });
+
+        const mergedMap = new Map();
+        rawFriends.forEach((n) => mergedMap.set(String(n.id), n));
+        myNotes.forEach((n) => mergedMap.set(String(n.id), n));
+
+        const mergedList = Array.from(mergedMap.values()).sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        setFriendsNotes(mergedList);
         setIsLoadingFeed(false);
         return;
       }
@@ -98,6 +123,14 @@ export default function Friends() {
   useEffect(() => {
     loadFriendsFeed();
     loadFriendshipHub();
+
+    const handleNoteCreated = () => {
+      loadFriendsFeed();
+    };
+    window.addEventListener('say_note_created', handleNoteCreated);
+    return () => {
+      window.removeEventListener('say_note_created', handleNoteCreated);
+    };
   }, [user]);
 
   // Search users in Friendship Hub
@@ -308,183 +341,16 @@ export default function Friends() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-                {friendsNotes.map((note) => {
-                  const isNotePlaying = currentTrack?.id === note.id && isPlaying;
-                  const timeInfo = formatTimeDetails(note.createdAt);
-                  const isLiked = likedNoteIds.has(note.id);
-                  const displayLikes = likeCounts[note.id] ?? (note.likesCount ?? note.likes ?? 0);
-
-                  return (
-                    <div
-                      key={note.id}
-                      className="rounded-3xl bg-[#091d30]/80 border border-[#153a5c] p-5 shadow-xl space-y-4 hover:border-cyan-500/40 transition-colors"
-                    >
-                      {/* Author Header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={note.userAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                            alt={note.userDisplayName}
-                            className="w-10 h-10 rounded-2xl object-cover border border-[#204d73]"
-                          />
-                          <div>
-                            <h4 className="text-xs font-bold text-[#E8EEF0]">
-                              {note.userDisplayName}
-                            </h4>
-                            <p className="text-[10px] text-[#91B9C5]/70 font-mono flex items-center gap-1.5">
-                              <span>{note.timeAgo || timeInfo.relative || 'recently'}</span>
-                              {timeInfo.time && !timeInfo.isToday && (
-                                <span className="text-[#91B9C5]/50">· {timeInfo.date}</span>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-
-                        {note.visibility && (
-                          <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#0d2840] text-cyan-300 border border-[#1b4366]">
-                            {note.visibility === 'FRIENDS_ONLY' ? 'Friends-only' : 'Public'}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Physical Card / Note Cover Display */}
-                      <div className="relative rounded-2xl overflow-hidden border border-[#1e486e] bg-[#061421] p-3.5 flex items-center gap-4">
-                        {/* Song Cover Art (Clean, unobstructed view) */}
-                        <div className={`relative w-16 h-16 rounded-xl overflow-hidden border shrink-0 bg-[#081724] transition-all ${
-                          isNotePlaying ? 'ring-2 ring-cyan-400 border-cyan-400 shadow-[0_0_14px_rgba(34,211,238,0.3)]' : 'border-[#23537e]'
-                        }`}>
-                          <img
-                            src={note.songImageUrl || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150'}
-                            alt={note.songTitle}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <h5 className="font-bold text-xs text-[#E8EEF0] truncate">
-                            {note.songTitle}
-                          </h5>
-                          <p className="text-[11px] text-[#91B9C5] truncate">
-                            {note.artistName}
-                          </p>
-                          {note.emotionTag && (
-                            <span className="inline-block mt-0.5 text-[9px] text-amber-200/90 font-medium">
-                              {note.emotionTag}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Play trigger button */}
-                        <button
-                          type="button"
-                          onClick={() => handlePlayToggle(note)}
-                          className={`p-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${
-                            isNotePlaying
-                              ? 'bg-cyan-400 text-[#07131e]'
-                              : 'bg-[#122e47] hover:bg-[#1a4469] text-cyan-300 border border-[#1e496f]'
-                          }`}
-                          title={isNotePlaying ? 'Pause' : 'Play Snippet'}
-                        >
-                          {isNotePlaying ? (
-                            <Pause className="w-4 h-4 fill-current" />
-                          ) : (
-                            <Play className="w-4 h-4 fill-current ml-0.5" />
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Caption & Lyric Snippet */}
-                      {(note.caption || note.lyricSnippet) && (
-                        <div className="text-xs space-y-1 text-[#E8EEF0]/90">
-                          {note.lyricSnippet && (
-                            <p className="font-serif italic text-cyan-200/90 text-[11px]">
-                              "{note.lyricSnippet}"
-                            </p>
-                          )}
-                          {note.caption && (
-                            <p className="text-[11px] text-[#91B9C5]/90 leading-relaxed">
-                              {note.caption}
-                            </p>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Interactive Actions Row: Like, Save, Reply with Song */}
-                      <div className="pt-2 border-t border-[#122c44] flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-xs text-[#91B9C5]">
-                          <button
-                            type="button"
-                            onClick={() => handleLikeNote(note.id, note.likesCount ?? note.likes ?? 0)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl transition-colors cursor-pointer ${
-                              isLiked ? 'text-rose-400 bg-rose-950/40' : 'hover:bg-[#122e47] hover:text-rose-300'
-                            }`}
-                            title="Like Note"
-                          >
-                            <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-rose-500 text-rose-500' : 'text-rose-400'}`} />
-                            <span className="text-[11px] font-mono font-medium">{displayLikes}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => toast.success('Saved to Notes Vault!')}
-                            className="p-1.5 rounded-xl hover:bg-[#122e47] hover:text-cyan-300 transition-colors cursor-pointer"
-                            title="Save Note"
-                          >
-                            <Bookmark className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        {/* Chapter 5.3 & Chapter 9: Reply with Song button */}
-                        <button
-                          type="button"
-                          onClick={() => setReplyModalNote(note)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600/30 to-[#1b517a]/40 hover:from-cyan-600/50 hover:to-[#1b517a]/60 text-cyan-200 border border-cyan-500/40 text-xs font-bold tracking-wide transition-all cursor-pointer shadow-sm active:scale-95"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5 text-cyan-300" />
-                          <span>Reply with Song</span>
-                        </button>
-                      </div>
-
-                      {/* Attached Musical Dialogues (Replies) */}
-                      {note.dialogues && note.dialogues.length > 0 && (
-                        <div className="pt-2 space-y-2 border-t border-[#10273d]">
-                          <span className="text-[9px] font-mono text-[#91B9C5]/60 uppercase tracking-widest block">
-                            Song Responses ({note.dialogues.length})
-                          </span>
-                          <div className="space-y-1.5">
-                            {note.dialogues.map((dlg, idx) => (
-                              <div
-                                key={dlg.id || idx}
-                                className="p-2 rounded-xl bg-[#061421] border border-[#132f4a] flex items-center justify-between text-xs"
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-bold text-[#E8EEF0] text-[11px] truncate">
-                                      {dlg.author || 'Friend'}
-                                    </span>
-                                    <span className="text-[9px] text-[#91B9C5]/60 font-mono">
-                                      replied:
-                                    </span>
-                                  </div>
-                                  <p className="text-[10px] text-cyan-300 font-medium truncate">
-                                    ♫ {dlg.song}
-                                  </p>
-                                  {dlg.caption && (
-                                    <p className="text-[10px] text-[#91B9C5]/80 italic truncate mt-0.5">
-                                      "{dlg.caption}"
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                    </div>
-                  );
-                })}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+                {friendsNotes.map((note) => (
+                  <MusicNoteCard
+                    key={note.id}
+                    note={note}
+                    isPlaying={currentTrack?.id === note.id && isPlaying}
+                    onPlayToggle={() => handlePlayToggle(note)}
+                    compact={true}
+                  />
+                ))}
               </div>
             )}
           </div>

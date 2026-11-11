@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { noteService } from '../services/noteService';
+import { calculateCurrentStreak } from '../utils/streakUtils';
 import { toast } from 'react-toastify';
 import { 
   Compass, Users, User, Flame, Sparkles, Disc, Plus, 
@@ -8,13 +10,38 @@ import {
 } from 'lucide-react';
 
 export default function Navbar() {
-  const { user, setStudioOpen, setLoginModalOpen, logout } = useAuthStore();
+  const { user, setUser, setStudioOpen, setLoginModalOpen, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
+
+  // Automatically calculate and synchronize the user's authentic daily streak
+  useEffect(() => {
+    if (!user?.id) return;
+    let isMounted = true;
+    const syncStreak = async () => {
+      try {
+        const res = await noteService.getUserNotes(user.id);
+        const userNotes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
+        const computedStreak = calculateCurrentStreak(userNotes);
+        if (isMounted && user.streakDays !== computedStreak) {
+          setUser({ ...user, streakDays: computedStreak });
+        }
+      } catch (err) {
+        console.warn('Navbar streak sync error:', err);
+      }
+    };
+
+    syncStreak();
+    window.addEventListener('say_note_created', syncStreak);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('say_note_created', syncStreak);
+    };
+  }, [user?.id, setUser]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -48,7 +75,7 @@ export default function Navbar() {
     ? user.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'MQ';
 
-  const streakDisplay = user?.streakDays || 14;
+  const streakDisplay = user?.streakDays ?? 0;
 
   return (
     <header className="sticky top-0 z-40 bg-[#081724]/95 backdrop-blur-md border-b border-[#142c40]/80 transition-colors">

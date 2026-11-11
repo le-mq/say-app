@@ -41,9 +41,23 @@ export default function AudioSnippetSelector({
   snippetDuration = 30,
   onSnippetDurationChange 
 }) {
-  const { isPlaying, currentTime, currentTrack, playTrack, pauseTrack, togglePlay, seekSnippet, setLooping, loadTrack } = usePlayerStore();
+  const { isPlaying, currentTime, currentTrack, playTrack, pauseTrack, togglePlay, seekSnippet, setSnippetDuration, setLooping, loadTrack } = usePlayerStore();
 
-  const isCurrentSnippetPlaying = currentTrack?.id === selectedTrack?.id && isPlaying;
+  const handleDurationChange = (newDur) => {
+    onSnippetDurationChange(newDur);
+    if (typeof setSnippetDuration === 'function') {
+      setSnippetDuration(newDur);
+    }
+  };
+
+  const isCurrentSnippetPlaying = Boolean(
+    isPlaying && (
+      currentTrack?.id === selectedTrack?.id ||
+      currentTrack?.id === 'studio-preview-id' ||
+      (selectedTrack?.externalSongUrl && currentTrack?.externalSongUrl === selectedTrack?.externalSongUrl) ||
+      (selectedTrack?.youtubeId && currentTrack?.youtubeId === selectedTrack?.youtubeId)
+    )
+  );
   const isPlayingRef = useRef(isCurrentSnippetPlaying);
   isPlayingRef.current = isCurrentSnippetPlaying;
 
@@ -95,6 +109,8 @@ export default function AudioSnippetSelector({
   // Drag tracking refs
   const isDraggingRef = useRef(false);
   const dragStartXRef = useRef(0);
+  const dragStartSecRef = useRef(0);
+  const isDraggingFrameRef = useRef(false);
   const hasMovedRef = useRef(false);
   const wasPlayingBeforeDragRef = useRef(false);
   const currentStartSecRef = useRef(startSec);
@@ -139,9 +155,6 @@ export default function AudioSnippetSelector({
     if (timeEndRef.current) {
       timeEndRef.current.textContent = formatTime(clampedEnd);
     }
-    if (playButtonLabelRef.current) {
-      playButtonLabelRef.current.textContent = `${isCurrentSnippetPlaying ? 'Pause' : 'Play'} (${formatTime(clamped)} - ${formatTime(clampedEnd)})`;
-    }
   }, [isFixedSample, maxStart, totalDuration, snippetDuration, isCurrentSnippetPlaying]);
 
   // Sync visuals whenever startSec or snippetDuration changes externally
@@ -170,93 +183,76 @@ export default function AudioSnippetSelector({
     }
   }, [isCurrentSnippetPlaying, currentTime, snippetDuration, isFixedSample]);
 
-  // Compute target second from event coordinates
-  const computeTargetSecFromEvent = useCallback((clientX) => {
-    if (!canScrub || !trackContainerRef.current || totalDuration <= 0) return 0;
-    const rect = trackContainerRef.current.getBoundingClientRect();
-    const clickX = Math.max(0, Math.min(rect.width, clientX - rect.left));
-    const ratio = clickX / rect.width;
-    const centerSec = ratio * totalDuration;
-    const target = Math.round(centerSec - snippetDuration / 2);
-    return Math.max(0, Math.min(target, maxStart));
-  }, [canScrub, totalDuration, snippetDuration, maxStart]);
-
-  // Handle pointer down (Click or Drag initiation)
+  // Handle pointer down: differentiate between dragging existing frame vs clicking outside to set start
   const handlePointerDown = (e) => {
-    if (!canScrub) return;
+    e.stopPropagation();
+    if (!canScrub || totalDuration <= 0) return;
 
     const clientX = e.clientX ?? e.touches?.[0]?.clientX;
     if (clientX === undefined) return;
 
+    if (!trackContainerRef.current) return;
+    const trackRect = trackContainerRef.current.getBoundingClientRect();
+    const clickX = Math.max(0, Math.min(trackRect.width, clientX - trackRect.left));
+    const clickRatio = clickX / trackRect.width;
+    const clickSec = clickRatio * totalDuration;
+
     isDraggingRef.current = true;
     dragStartXRef.current = clientX;
+    dragStartSecRef.current = currentStartSecRef.current;
     hasMovedRef.current = false;
     wasPlayingBeforeDragRef.current = isPlayingRef.current;
 
-    const targetSec = computeTargetSecFromEvent(clientX);
-    currentStartSecRef.current = targetSec;
-    updateVisualPosition(targetSec);
+    // Check if user clicked inside the current selection window:
+    const currentStart = currentStartSecRef.current;
+    const currentEnd = currentStart + snippetDuration;
+    const isInsideFrame = clickSec >= currentStart && clickSec <= currentEnd;
 
-    // If currently playing, pause temporarily so old audio stops immediately
-    if (isPlayingRef.current) {
-      pauseTrack();
+    if (isInsideFrame) {
+      // User grabbed the selection frame: drag from current start position smoothly without jumping
+      isDraggingFrameRef.current = true;
+    } else {
+      // User clicked outside the frame: jump the snippet start directly to the clicked point!
+      isDraggingFrameRef.current = false;
+      const targetSec = Math.max(0, Math.min(Math.round(clickSec), maxStart));
+      currentStartSecRef.current = targetSec;
+      dragStartSecRef.current = targetSec;
+      updateVisualPosition(targetSec);
     }
 
-    // Hide playhead needle while actively dragging
+    // Hide playhead needle while actively interacting
     if (playheadNeedleRef.current) {
       playheadNeedleRef.current.style.display = 'none';
     }
   };
 
-  // Instant Click-to-Jump handler
-  const handleClick = (e) => {
-    if (!canScrub) return;
-    const clientX = e.clientX;
-    if (clientX === undefined) return;
-
-    const targetSec = computeTargetSecFromEvent(clientX);
-    currentStartSecRef.current = targetSec;
-    updateVisualPosition(targetSec);
-    onSnippetStartChange(targetSec);
-
-    const shouldPlay = wasPlayingBeforeDragRef.current || isPlayingRef.current;
-    if (shouldPlay && selectedTrack) {
-      playTrack({
-        ...selectedTrack,
-        audioSnippetStart: targetSec,
-        snippetDuration,
-        loop: true,
-      }, {
-        snippetStart: targetSec,
-        snippetDuration,
-        loop: true,
-      });
-    } else if (selectedTrack) {
-      if (currentTrack?.id === selectedTrack?.id) {
-        seekSnippet(targetSec, snippetDuration, false);
-      } else {
-        loadTrack(selectedTrack, {
-          snippetStart: targetSec,
-          snippetDuration,
-          autoPlay: false,
-        });
-      }
-    }
-    wasPlayingBeforeDragRef.current = false;
-  };
-
   // Pointer move & release listeners: zero distortion, clean immediate playback from new frame position
   useEffect(() => {
     const handlePointerMove = (e) => {
-      if (!isDraggingRef.current || !canScrub) return;
+      if (!isDraggingRef.current || !canScrub || totalDuration <= 0) return;
       const clientX = e.clientX ?? e.touches?.[0]?.clientX;
       if (clientX === undefined) return;
 
-      if (Math.abs(clientX - dragStartXRef.current) > 3) {
+      const deltaX = clientX - dragStartXRef.current;
+      if (Math.abs(deltaX) > 3) {
         hasMovedRef.current = true;
       }
 
-      const targetSec = computeTargetSecFromEvent(clientX);
+      if (!trackContainerRef.current) return;
+      const trackRect = trackContainerRef.current.getBoundingClientRect();
+
+      let targetSec;
+      if (isDraggingFrameRef.current) {
+        // Dragging the frame by mouse delta: smooth 1:1 tactile movement!
+        const deltaSec = (deltaX / trackRect.width) * totalDuration;
+        targetSec = Math.max(0, Math.min(Math.round(dragStartSecRef.current + deltaSec), maxStart));
+      } else {
+        // Dragging from a new click point:
+        const currentX = Math.max(0, Math.min(trackRect.width, clientX - trackRect.left));
+        const ratio = currentX / trackRect.width;
+        targetSec = Math.max(0, Math.min(Math.round(ratio * totalDuration), maxStart));
+      }
+
       currentStartSecRef.current = targetSec;
 
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
@@ -268,14 +264,17 @@ export default function AudioSnippetSelector({
     const handlePointerUp = () => {
       if (isDraggingRef.current) {
         isDraggingRef.current = false;
+        isDraggingFrameRef.current = false;
 
         const finalSec = currentStartSecRef.current;
         onSnippetStartChange(finalSec);
 
-        // If audio was playing before drag, immediately play from the new frame position!
-        if (wasPlayingBeforeDragRef.current && selectedTrack) {
+        // If audio was playing before drag or is currently playing, smoothly seek and play from the new position!
+        const shouldPlay = wasPlayingBeforeDragRef.current || isPlayingRef.current;
+        if (shouldPlay && selectedTrack) {
           playTrack({
             ...selectedTrack,
+            id: 'studio-preview-id',
             audioSnippetStart: finalSec,
             snippetDuration,
             loop: true,
@@ -285,11 +284,14 @@ export default function AudioSnippetSelector({
             loop: true,
           });
         } else if (selectedTrack) {
-          // If paused, prime audio engine at the new frame position without auto-playing
-          if (currentTrack?.id === selectedTrack?.id) {
+          // If paused, update audio position without auto-starting
+          if (currentTrack?.id === selectedTrack?.id || currentTrack?.id === 'studio-preview-id' || currentTrack?.externalSongUrl === selectedTrack?.externalSongUrl) {
             seekSnippet(finalSec, snippetDuration, false);
           } else {
-            loadTrack(selectedTrack, {
+            loadTrack({
+              ...selectedTrack,
+              id: 'studio-preview-id',
+            }, {
               snippetStart: finalSec,
               snippetDuration,
               autoPlay: false,
@@ -312,7 +314,7 @@ export default function AudioSnippetSelector({
       window.removeEventListener('touchend', handlePointerUp);
       if (rafIdRef.current) cancelAnimationFrame(rafIdRef.current);
     };
-  }, [canScrub, computeTargetSecFromEvent, updateVisualPosition, onSnippetStartChange, playTrack, selectedTrack, snippetDuration, seekSnippet, loadTrack, currentTrack]);
+  }, [canScrub, totalDuration, maxStart, updateVisualPosition, onSnippetStartChange, playTrack, selectedTrack, snippetDuration, seekSnippet, loadTrack, currentTrack]);
 
   // Toggle Play / Pause cleanly
   const handleTogglePlay = () => {
@@ -324,6 +326,7 @@ export default function AudioSnippetSelector({
       setLooping(true);
       playTrack({
         ...selectedTrack,
+        id: 'studio-preview-id',
         audioSnippetStart: startSec,
         snippetDuration: isFixedSample ? 30 : snippetDuration,
         loop: true,
@@ -340,7 +343,10 @@ export default function AudioSnippetSelector({
   const initialRightPct = initialLeftPct + initialWidthPct;
 
   return (
-    <div className="space-y-3 bg-[#10141a]/95 border border-white/10 rounded-2xl p-4 select-none">
+    <div 
+      onClick={(e) => e.stopPropagation()}
+      className="space-y-3 bg-[#10141a]/95 border border-white/10 rounded-2xl p-4 select-none"
+    >
       
       {/* 1. Header & Duration Toggle */}
       <div className="flex items-center justify-between">
@@ -354,7 +360,7 @@ export default function AudioSnippetSelector({
           <div className="flex items-center gap-1 bg-[#0a0d12] p-0.5 rounded-xl border border-white/10">
             <button
               type="button"
-              onClick={() => onSnippetDurationChange(30)}
+              onClick={() => handleDurationChange(30)}
               className={`px-2.5 py-0.5 rounded-lg text-[10.5px] font-mono font-bold transition-all cursor-pointer ${
                 snippetDuration === 30
                   ? 'bg-neutral-200 text-neutral-900 shadow-sm'
@@ -365,7 +371,7 @@ export default function AudioSnippetSelector({
             </button>
             <button
               type="button"
-              onClick={() => onSnippetDurationChange(45)}
+              onClick={() => handleDurationChange(45)}
               className={`px-2.5 py-0.5 rounded-lg text-[10.5px] font-mono font-bold transition-all cursor-pointer ${
                 snippetDuration === 45
                   ? 'bg-neutral-200 text-neutral-900 shadow-sm'
@@ -389,14 +395,34 @@ export default function AudioSnippetSelector({
       ) : (
         <div className="space-y-3">
           
-          {/* 2. Minimalist Time Readout */}
+          {/* 2. Minimalist Time Readout with Integrated Tactile Play Control */}
           <div className="flex items-center justify-between text-xs font-mono">
-            <span className="text-neutral-400">
-              Start: <strong ref={timeStartRef} className="text-white font-bold">{formatTime(startSec)}</strong>
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTogglePlay}
+                className={`flex items-center justify-center w-6 h-6 rounded-full transition-all shadow-sm cursor-pointer shrink-0 ${
+                  isCurrentSnippetPlaying
+                    ? 'bg-sky-400 text-slate-950 shadow-[0_0_10px_rgba(56,189,248,0.7)] scale-105'
+                    : 'bg-[#102a3e] hover:bg-sky-500/20 text-sky-200 border border-sky-400/40 hover:text-white'
+                }`}
+                title={isCurrentSnippetPlaying ? "Pause snippet preview" : "Play snippet preview"}
+              >
+                {isCurrentSnippetPlaying ? (
+                  <Pause className="w-2.5 h-2.5 fill-current" />
+                ) : (
+                  <Play className="w-2.5 h-2.5 fill-current ml-0.5" />
+                )}
+              </button>
+              <span className="text-neutral-400">
+                Start: <strong ref={timeStartRef} className="text-white font-bold">{formatTime(startSec)}</strong>
+              </span>
+            </div>
+
             <span className="font-bold text-[11px] font-mono text-sky-300">
               {snippetDuration}s Snippet {effectiveTrackDuration ? `(Total ${formatTime(effectiveTrackDuration)})` : ''}
             </span>
+
             <span className="text-neutral-400">
               End: <strong ref={timeEndRef} className="text-white font-bold">{formatTime(endSec)}</strong>
             </span>
@@ -407,12 +433,11 @@ export default function AudioSnippetSelector({
             ref={trackContainerRef}
             onMouseDown={handlePointerDown}
             onTouchStart={handlePointerDown}
-            onClick={handleClick}
             style={{ touchAction: 'none' }}
             className={`relative w-full h-20 bg-[#0a0d12] rounded-2xl overflow-hidden border border-white/10 px-3 flex items-center justify-between select-none shadow-inner group ${
               canScrub ? 'cursor-pointer' : 'cursor-default'
             }`}
-            title={canScrub ? "Click or drag anywhere to select your 30s snippet" : "Fixed 30s sample"}
+            title={canScrub ? "Click or drag anywhere to select your audio snippet" : "Fixed 30s sample"}
           >
             {/* LAYER A: BASE MUTED ORGANIC WAVEFORM BARS */}
             <div className="absolute inset-0 px-3 flex items-center justify-between pointer-events-none">
@@ -488,58 +513,6 @@ export default function AudioSnippetSelector({
               )}
             </div>
 
-          </div>
-
-          {/* Minimalist Play / Pause & Reset Controls */}
-          <div className="flex items-center justify-between pt-1">
-            <button
-              type="button"
-              onClick={handleTogglePlay}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all shadow-sm cursor-pointer ${
-                isCurrentSnippetPlaying
-                  ? 'bg-white text-neutral-900 ring-2 ring-white/30'
-                  : 'bg-neutral-200 hover:bg-white text-neutral-900'
-              }`}
-            >
-              {isCurrentSnippetPlaying ? (
-                <>
-                  <Pause className="w-3.5 h-3.5 fill-current" />
-                  <span ref={playButtonLabelRef}>Pause ({formatTime(startSec)} - {formatTime(endSec)})</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                  <span ref={playButtonLabelRef}>Play Snippet ({formatTime(startSec)} - {formatTime(endSec)})</span>
-                </>
-              )}
-            </button>
-
-            {canScrub && (
-              <button
-                type="button"
-                onClick={() => {
-                  onSnippetStartChange(0);
-                  if (isCurrentSnippetPlaying) {
-                    playTrack({
-                      ...selectedTrack,
-                      audioSnippetStart: 0,
-                      snippetDuration,
-                      loop: true,
-                    }, {
-                      snippetStart: 0,
-                      snippetDuration,
-                      loop: true,
-                    });
-                  } else {
-                    seekSnippet(0, snippetDuration, false);
-                  }
-                }}
-                className="flex items-center gap-1 text-[11px] font-mono text-[#91B9C5]/70 hover:text-white transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset 00:00</span>
-              </button>
-            )}
           </div>
 
         </div>

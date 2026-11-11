@@ -10,8 +10,10 @@ import {
 import { formatTimeDetails } from '../utils/timeFormat';
 
 export default function Feed() {
-  const { user } = useAuthStore();
-  const { currentTrack, isPlaying, playTrack, loadTrack, togglePlay, setLooping } = usePlayerStore();
+  const { user, isStudioOpen } = useAuthStore();
+  const { currentTrack, isPlaying, playTrack, loadTrack, togglePlay, setLooping } = usePlayerStore(
+    (s) => ({ currentTrack: s.currentTrack, isPlaying: s.isPlaying })
+  );
 
   const [notes, setNotes] = useState([]);
   const [activeNoteId, setActiveNoteId] = useState(null);
@@ -48,6 +50,11 @@ export default function Feed() {
     isAutoPlayRef.current = isAutoPlay;
     setLooping(!isAutoPlay);
   }, [isAutoPlay, setLooping]);
+
+  const isStudioOpenRef = useRef(isStudioOpen);
+  useEffect(() => {
+    isStudioOpenRef.current = isStudioOpen;
+  }, [isStudioOpen]);
 
   const activeNoteIdRef = useRef(activeNoteId);
   useEffect(() => {
@@ -168,6 +175,7 @@ export default function Feed() {
   // Listen to GlobalPlayerDock next/prev track changes and smoothly scroll feed
   useEffect(() => {
     const handleNoteChanged = (e) => {
+      if (isStudioOpenRef.current) return;
       const noteId = String(e?.detail?.noteId || '');
       if (!noteId) return;
       activeNoteIdRef.current = noteId;
@@ -187,7 +195,7 @@ export default function Feed() {
   // Auto-Play: Automatically scroll to and play the next note sequentially when current snippet finishes
   useEffect(() => {
     const handleSnippetEnded = () => {
-      if (!isAutoPlayRef.current || isAdvancingRef.current) return;
+      if (isStudioOpenRef.current || !isAutoPlayRef.current || isAdvancingRef.current) return;
       isAdvancingRef.current = true;
       setTimeout(() => {
         isAdvancingRef.current = false;
@@ -236,7 +244,7 @@ export default function Feed() {
 
   // Handle Note Activation: Switch music if Auto-Play is ON or if user is currently playing music
   const handleNoteBecameActive = useCallback((noteId) => {
-    if (isAdvancingRef.current) return;
+    if (isStudioOpenRef.current || isAdvancingRef.current) return;
     setActiveNoteId(noteId);
 
     if (debounceTimerRef.current) {
@@ -244,7 +252,7 @@ export default function Feed() {
     }
 
     debounceTimerRef.current = setTimeout(() => {
-      if (isAdvancingRef.current) return;
+      if (isStudioOpenRef.current || isAdvancingRef.current) return;
       // If Auto-Play is ON, OR if music is currently playing, switch to the new active card
       if (isAutoPlay || isPlayingRef.current) {
         if (String(currentTrackRef.current?.id) === String(noteId) && isPlayingRef.current) {
@@ -275,6 +283,7 @@ export default function Feed() {
 
   // Fallback scroll handler: precisely detect active card based on scroll position
   const handleContainerScroll = () => {
+    if (isStudioOpenRef.current) return;
     setHasUserInteracted(true);
     if (!containerRef.current || !notes.length) return;
     const container = containerRef.current;
@@ -296,6 +305,7 @@ export default function Feed() {
 
   // Direct Play toggle on card or turntable (Chapter 4.5: Update PlayingNote)
   const handleDirectPlayToggle = (note) => {
+    if (isStudioOpen) return;
     setHasUserInteracted(true);
     setActiveNoteId(note.id);
     if (currentTrack?.id === note.id) {
@@ -321,7 +331,7 @@ export default function Feed() {
   };
 
   const activeNote = notes.find((n) => n.id === activeNoteId) || notes[0];
-  const isTurntablePlaying = currentTrack?.id === activeNote?.id && isPlaying;
+  const isTurntablePlaying = !isStudioOpen && currentTrack?.id === activeNote?.id && isPlaying;
 
   // Auto-Play Toggle Action: Turning ON enables auto-advance without restarting track if already playing
   const handleToggleAutoPlay = () => {
@@ -352,6 +362,7 @@ export default function Feed() {
 
   // Keep GlobalPlayerDock synchronized with the active note in view
   useEffect(() => {
+    if (isStudioOpen) return;
     if (activeNote) {
       // If nothing is playing, update dock to reflect the active note in view
       if (!isPlaying) {
@@ -375,9 +386,9 @@ export default function Feed() {
   }, [activeNoteId, activeNote?.id, isPlaying, loadTrack]);
 
   return (
-    <div className="relative w-full h-[calc(100dvh-4rem-4.5rem)] sm:h-[calc(100vh-4rem-4.5rem)] flex items-center justify-center overflow-hidden select-text bg-[#061320]">
+    <div className={`relative w-full h-[calc(100dvh-4rem-4.5rem)] sm:h-[calc(100vh-4rem-4.5rem)] flex items-center justify-center overflow-hidden select-text bg-[#061320] ${isStudioOpen ? 'pointer-events-none select-none' : ''}`}>
       
-      {/* 1. DYNAMIC AMBIENT AURA (Dark Petrol Canvas with subtle Cyan & Aston Martin Teal glow) */}
+      {/* 1. DYNAMIC AMBIENT AURA (Dark Petrol Canvas with subtle, uniform backlight) */}
       {activeNote?.songImageUrl && (
         <div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-out overflow-hidden z-0">
           <div 
@@ -385,8 +396,7 @@ export default function Feed() {
             style={{ backgroundImage: `url(${activeNote.songImageUrl})` }}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-[#06121d]/95 via-[#081724]/98 to-[#040c14]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.08)_0%,rgba(0,89,76,0.1)_35%,transparent_75%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(145,185,197,0.06)_0%,transparent_50%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(0,89,76,0.08)_0%,transparent_60%)]" />
         </div>
       )}
 
@@ -400,67 +410,89 @@ export default function Feed() {
           aria-label="Turntable Visualizer"
           className="hidden xl:flex flex-col items-center justify-center w-[300px] shrink-0 text-center animate-in fade-in duration-500"
         >
-          <div 
-            onClick={() => handleDirectPlayToggle(activeNote)}
-            className="relative w-56 h-56 flex items-center justify-center mb-5 group cursor-pointer"
-            title={isTurntablePlaying ? "Pause Vinyl Record" : "Play Vinyl Record"}
-          >
-            {/* Spinning Vinyl Record */}
+          {/* Top spacer matching main's control bar so Card 1 top edge matches Card 2 & 3 */}
+          <div className="w-full h-8 px-2 py-1.5 shrink-0 invisible pointer-events-none" aria-hidden="true" />
+
+          {/* Unified 500px card container matching Center and Right cards */}
+          <div className="relative w-full h-[500px] rounded-3xl p-5 backdrop-blur-2xl bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col justify-between items-center overflow-hidden group">
+            
+            {/* Ambient backlight reflection */}
             <div 
-              className={`w-52 h-52 rounded-full bg-[#071523] border-4 border-[#122e44] shadow-[0_15px_40px_rgba(0,0,0,0.85)] flex items-center justify-center relative overflow-hidden transition-all duration-700 group-hover:border-cyan-400/50 ${
-                isTurntablePlaying ? 'animate-spin-slow ring-2 ring-cyan-400/40' : ''
-              }`}
-            >
-              {/* Vinyl sound groove micro-rings */}
-              <div className="absolute inset-2.5 rounded-full border border-sky-400/15" />
-              <div className="absolute inset-6 rounded-full border border-sky-400/10" />
-              <div className="absolute inset-10 rounded-full border border-sky-400/15" />
-              <div className="absolute inset-14 rounded-full border border-sky-400/10" />
-              
-              {/* Center Vinyl Artwork Label */}
-              <div className="w-18 h-18 rounded-full overflow-hidden border-2 border-sky-400/40 shadow-inner relative">
-                <img 
-                  src={activeNote?.songImageUrl} 
-                  alt={activeNote?.songTitle} 
-                  className="w-full h-full object-cover select-none pointer-events-none" 
-                />
+              className="absolute -top-12 -left-12 w-48 h-48 rounded-full filter blur-3xl opacity-20 pointer-events-none transition-all duration-1000 group-hover:opacity-30"
+              style={{
+                background: 'radial-gradient(circle, rgba(56,189,248,0.18) 0%, rgba(0,89,76,0.12) 50%, transparent 100%)'
+              }}
+            />
+
+            {/* Status Header */}
+            <div className="relative z-10 w-full flex items-center justify-between pb-3 border-b border-sky-500/20 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${isTurntablePlaying ? 'bg-sky-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#E8EEF0]/90">
+                  VINYL TURNTABLE
+                </span>
               </div>
-              <div className="absolute w-3.5 h-3.5 rounded-full bg-[#081724] border border-sky-300/40 pointer-events-none" />
-            </div>
-
-            {/* Stylus needle arm - Silver & subtle Cyan tip */}
-            <div 
-              className={`absolute -top-2 right-2 w-14 h-24 pointer-events-none transition-transform duration-500 origin-top ${
-                isTurntablePlaying ? 'rotate-20' : 'rotate-0 opacity-60'
-              }`}
-            >
-              <div className="w-1.5 h-16 bg-gradient-to-b from-neutral-200 via-neutral-300 to-neutral-500 rounded-full shadow-md" />
-              <div className="w-2.5 h-3.5 bg-cyan-400/90 rounded -ml-0.5 shadow-sm" />
-            </div>
-          </div>
-
-          {/* Turntable Info Box - Frosted Petrol Glass */}
-          <div className="bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 p-4.5 rounded-3xl w-full text-left shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-2xl">
-            <div className="flex items-center justify-between text-[10px] font-mono text-sky-300 uppercase tracking-widest mb-1.5 font-bold">
-              <span>ACTIVE RECORD</span>
-              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono ${
                 isTurntablePlaying ? 'bg-sky-950/80 text-sky-200 border border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.3)]' : 'bg-white/[0.05] text-slate-400 border border-white/10'
               }`}>
                 {isTurntablePlaying ? '● PLAYING' : 'READY'}
               </span>
             </div>
 
-            <p className="text-xs font-bold text-[#E8EEF0] truncate">
-              {activeNote?.songTitle}
-            </p>
-            <p className="text-[11px] text-[#91B9C5] truncate font-mono mt-0.5">
-              {activeNote?.artistName}
-            </p>
+            {/* Center Spinning Vinyl Record */}
+            <div 
+              onClick={() => handleDirectPlayToggle(activeNote)}
+              className="relative w-48 h-48 flex items-center justify-center my-auto group cursor-pointer"
+              title={isTurntablePlaying ? "Pause Vinyl Record" : "Play Vinyl Record"}
+            >
+              <div 
+                className={`w-44 h-44 rounded-full bg-[#071523] border-4 border-[#122e44] shadow-[0_15px_40px_rgba(0,0,0,0.85)] flex items-center justify-center relative overflow-hidden transition-all duration-700 group-hover:border-cyan-400/50 ${
+                  isTurntablePlaying ? 'animate-spin-slow ring-2 ring-cyan-400/40' : ''
+                }`}
+              >
+                {/* Vinyl sound groove micro-rings */}
+                <div className="absolute inset-2.5 rounded-full border border-sky-400/15" />
+                <div className="absolute inset-6 rounded-full border border-sky-400/10" />
+                <div className="absolute inset-10 rounded-full border border-sky-400/15" />
+                <div className="absolute inset-14 rounded-full border border-sky-400/10" />
+                
+                {/* Center Vinyl Artwork Label */}
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-sky-400/40 shadow-inner relative">
+                  <img 
+                    src={activeNote?.songImageUrl} 
+                    alt={activeNote?.songTitle} 
+                    className="w-full h-full object-cover select-none pointer-events-none" 
+                  />
+                </div>
+                <div className="absolute w-3 h-3 rounded-full bg-[#081724] border border-sky-300/40 pointer-events-none" />
+              </div>
 
-            <div className="mt-3 pt-2.5 border-t border-sky-500/20 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]/80">
-              <span>PREVIEW: {activeNote?.snippetDuration || 30}s</span>
-              <span>TEMPLATE: {activeNote?.templateType || 'RECEIPTIFY'}</span>
+              {/* Stylus needle arm */}
+              <div 
+                className={`absolute -top-1 right-2 w-12 h-20 pointer-events-none transition-transform duration-500 origin-top ${
+                  isTurntablePlaying ? 'rotate-20' : 'rotate-0 opacity-60'
+                }`}
+              >
+                <div className="w-1.5 h-14 bg-gradient-to-b from-neutral-200 via-neutral-300 to-neutral-500 rounded-full shadow-md" />
+                <div className="w-2.5 h-3 bg-cyan-400/90 rounded -ml-0.5 shadow-sm" />
+              </div>
             </div>
+
+            {/* Turntable Info Box */}
+            <div className="relative z-10 w-full text-left pt-3 border-t border-sky-500/20 shrink-0">
+              <p className="text-xs font-bold text-[#E8EEF0] truncate">
+                {activeNote?.songTitle}
+              </p>
+              <p className="text-[11px] text-[#91B9C5] truncate font-mono mt-0.5">
+                {activeNote?.artistName}
+              </p>
+
+              <div className="mt-2.5 pt-2 border-t border-sky-500/15 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]/80">
+                <span>PREVIEW: {activeNote?.snippetDuration || 30}s</span>
+                <span>TEMPLATE: {activeNote?.templateType || 'RECEIPTIFY'}</span>
+              </div>
+            </div>
+
           </div>
         </aside>
 

@@ -329,7 +329,7 @@ export class YouTubeAdapter {
       const container = document.createElement('div');
       container.id = 'say-youtube-audio-engine';
       container.setAttribute('aria-hidden', 'true');
-      container.style.cssText = 'position:fixed;bottom:8px;left:8px;width:200px;height:120px;opacity:0.001;pointer-events:none;overflow:hidden;z-index:10;';
+      container.style.cssText = 'position:fixed;bottom:0;left:0;width:1px;height:1px;opacity:0.001;pointer-events:none;overflow:hidden;z-index:-1;';
       const slot = document.createElement('div');
       slot.id = this.containerId;
       container.appendChild(slot);
@@ -412,6 +412,22 @@ export class YouTubeAdapter {
         break;
       case 5: // YT.PlayerState.CUED
       case -1: // YT.PlayerState.UNSTARTED
+        // Instantly inspect full duration from player upon cueing!
+        try {
+          const fullDur = Math.round(this.player.getDuration() || 0);
+          if (fullDur > 0 && (!this.service.currentTrack?.duration || this.service.currentTrack.duration !== fullDur)) {
+            if (this.service.currentTrack) {
+              this.service.currentTrack.duration = fullDur;
+              this.service.currentTrack.fullDuration = fullDur;
+            }
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('say_track_duration_detected', {
+                detail: { trackId: this.service.currentTrack?.id, duration: fullDur }
+              }));
+            }
+          }
+        } catch (_) {}
+
         if (!this.service.isManuallyPaused && this.service.activeProvider === this) {
           try {
             this.player.playVideo();
@@ -663,15 +679,21 @@ export class YouTubeAdapter {
 
     if (autoPlay === true) {
       try {
-        // ALWAYS use loadVideoById to force YouTube to immediately stream from startSec!
-        // This completely eliminates any race condition where YouTube was loading 0s and ignored seekTo!
-        this.player.loadVideoById({
-          videoId: this.currentVideoId,
-          startSeconds: startSec,
-          suggestedQuality: 'small',
-        });
-        if (typeof this.player.setPlaybackQuality === 'function') {
-          this.player.setPlaybackQuality('small');
+        const playerState = typeof this.player.getPlayerState === 'function' ? this.player.getPlayerState() : -1;
+        // If YouTube player is already initialized and active (1: PLAYING, 2: PAUSED, 3: BUFFERING),
+        // seekTo is instant and avoids flashing or reloading the iframe!
+        if (playerState === 1 || playerState === 2 || playerState === 3) {
+          this.player.seekTo(startSec, true);
+          this.player.playVideo();
+        } else {
+          this.player.loadVideoById({
+            videoId: this.currentVideoId,
+            startSeconds: startSec,
+            suggestedQuality: 'small',
+          });
+          if (typeof this.player.setPlaybackQuality === 'function') {
+            this.player.setPlaybackQuality('small');
+          }
         }
       } catch (e) {
         try {
@@ -950,13 +972,28 @@ class MusicPlaybackService {
     const prevStart = Number(this.currentTrack?.audioSnippetStart ?? 0);
 
     // If same track is already loaded
-    if (this.currentTrack && this.currentTrack.id === track.id && this.activeProvider) {
+    const isSameTrack = Boolean(
+      this.currentTrack && (
+        this.currentTrack.id === track.id ||
+        (this.currentTrack.id === 'studio-preview-id' && track.id === 'studio-preview-id') ||
+        (track.id === 'studio-preview-id' && this.currentTrack.externalSongUrl === track.externalSongUrl) ||
+        (this.currentTrack.id === 'studio-preview-id' && this.currentTrack.externalSongUrl === track.externalSongUrl) ||
+        (track.externalSongUrl && this.currentTrack.externalSongUrl === track.externalSongUrl) ||
+        (track.youtubeId && this.currentTrack.youtubeId === track.youtubeId)
+      )
+    );
+
+    if (isSameTrack && this.activeProvider) {
       this.isManuallyPaused = false;
+      this.currentTrack = { ...this.currentTrack, ...track };
+      if (options.snippetDuration || track.snippetDuration) {
+        this.duration = Number(options.snippetDuration || track.snippetDuration);
+      }
       if (options.loop !== undefined) {
         this.setLooping(options.loop);
       }
       // Unconditionally seek snippet to guarantee player synchronizes to requestedStart
-      this.seekSnippet(requestedStart, options.snippetDuration || track.snippetDuration);
+      this.seekSnippet(requestedStart, options.snippetDuration || track.snippetDuration, true);
       if (this.playbackState !== PlaybackState.PLAYING) {
         this.resume();
       }
@@ -1037,6 +1074,21 @@ class MusicPlaybackService {
     if (this.activeProvider) {
       this.activeProvider.seekTo(relativeSeconds);
     }
+  }
+
+  setSnippetDuration(duration) {
+    const dur = Math.max(1, Number(duration) || DEFAULT_SNIPPET_DURATION);
+    this.duration = dur;
+    if (this.currentTrack) {
+      this.currentTrack.snippetDuration = dur;
+    }
+    if (this.youtubeAdapter) {
+      this.youtubeAdapter.snippetDuration = dur;
+    }
+    if (this.itunesAdapter) {
+      this.itunesAdapter.snippetDuration = dur;
+    }
+    this.notify();
   }
 
   seekSnippet(startSec, duration, autoPlay = null) {

@@ -160,7 +160,11 @@ export default function StudioModal({ onNoteCreated }) {
       setStudioOpen(false);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to publish note to server';
-      toast.error(msg);
+      if (typeof msg === 'string' && msg.includes('Invalid template type: GALAXY')) {
+        toast.error('Template GALAXY đã được thêm vào mã nguồn backend. Vui lòng restart backend Spring Boot để nạp cấu hình mới!');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -170,18 +174,18 @@ export default function StudioModal({ onNoteCreated }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-xl overflow-hidden animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/45 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
     >
       {/* Click outside backdrop */}
       <div className="fixed inset-0" onClick={handleClose} />
 
-      {/* Main Studio Modal Window */}
-      <div className="relative z-10 w-full max-w-[1180px] my-auto bg-[#0d1015] border border-white/10 rounded-3xl shadow-[0_30px_90px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden max-h-[92vh]">
+      {/* Main Studio Modal Window with Frosted Glassmorphism */}
+      <div className="relative z-10 w-full max-w-[1180px] my-auto bg-[#07131f]/75 backdrop-blur-2xl border border-sky-400/20 rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.1)] flex flex-col overflow-hidden max-h-[92vh]">
         
         {/* Header Bar: Trendy, minimalist with Discard & Publish Note */}
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between shrink-0 bg-[#0a0d12]">
+        <div className="px-6 py-4 border-b border-sky-500/20 flex items-center justify-between shrink-0 bg-[#06101a]/70 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -277,7 +281,7 @@ export default function StudioModal({ onNoteCreated }) {
           {/* ============================================================== */}
           {/* RIGHT COLUMN: REAL-TIME LIVE PREVIEW                            */}
           {/* ============================================================== */}
-          <div className="w-full lg:w-[460px] bg-[#071524] border-t lg:border-t-0 lg:border-l border-sky-500/20 p-5 sm:p-6 flex flex-col items-center justify-between shrink-0 overflow-y-auto custom-scrollbar relative">
+          <div className="w-full lg:w-[460px] bg-[#05111d]/50 backdrop-blur-xl border-t lg:border-t-0 lg:border-l border-sky-500/20 p-5 sm:p-6 flex flex-col items-center justify-between shrink-0 overflow-y-auto custom-scrollbar relative">
             <div className="absolute inset-0 bg-gradient-to-b from-[#00594c]/15 via-transparent to-sky-500/10 pointer-events-none" />
             
             {/* Minimalist Live Header */}

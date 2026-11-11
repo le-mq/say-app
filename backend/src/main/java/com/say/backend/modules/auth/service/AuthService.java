@@ -161,23 +161,12 @@ public class AuthService implements IAuthService {
 
             int daysInMonth = yearMonth.lengthOfMonth();
             List<StreakDayDto> streakDays = new ArrayList<>();
-            int currentStreak = 0;
-            int maxStreak = 0;
 
             for (int day = 1; day <= daysInMonth; day++) {
                 LocalDate date = yearMonth.atDay(day);
                 Note note = notesByDay.get(day);
                 boolean hasNote = (note != null);
                 int noteCount = countsByDay.getOrDefault(day, 0L).intValue();
-
-                if (hasNote) {
-                    currentStreak++;
-                    if (currentStreak > maxStreak) {
-                        maxStreak = currentStreak;
-                    }
-                } else {
-                    currentStreak = 0;
-                }
 
                 streakDays.add(StreakDayDto.builder()
                         .dayOfMonth(day)
@@ -193,12 +182,36 @@ public class AuthService implements IAuthService {
                         .build());
             }
 
+            // Real Current Habit Streak: Consecutive days leading up to today (or yesterday if user has not posted yet today)
+            List<Note> allUserNotes = noteRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            Set<LocalDate> activeDates = allUserNotes.stream()
+                    .map(n -> n.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate())
+                    .collect(Collectors.toSet());
+
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate yesterday = today.minusDays(1);
+
+            int realCurrentStreak = 0;
+            LocalDate cursor = null;
+            if (activeDates.contains(today)) {
+                cursor = today;
+            } else if (activeDates.contains(yesterday)) {
+                cursor = yesterday;
+            }
+
+            if (cursor != null) {
+                while (activeDates.contains(cursor)) {
+                    realCurrentStreak++;
+                    cursor = cursor.minusDays(1);
+                }
+            }
+
             StreakCalendarDto response = StreakCalendarDto.builder()
                     .userId(userId)
                     .year(year)
                     .month(month)
                     .totalNotesThisMonth(notes.size())
-                    .currentStreakDays(maxStreak)
+                    .currentStreakDays(realCurrentStreak)
                     .days(streakDays)
                     .build();
 
@@ -212,6 +225,33 @@ public class AuthService implements IAuthService {
     }
 
     private UserProfileDto mapToProfileDto(User user) {
+        int streak = 0;
+        try {
+            List<Note> allUserNotes = noteRepository.findByUserIdOrderByCreatedAtDesc(user.getId());
+            Set<LocalDate> activeDates = allUserNotes.stream()
+                    .map(n -> n.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate())
+                    .collect(Collectors.toSet());
+
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate yesterday = today.minusDays(1);
+
+            LocalDate cursor = null;
+            if (activeDates.contains(today)) {
+                cursor = today;
+            } else if (activeDates.contains(yesterday)) {
+                cursor = yesterday;
+            }
+
+            if (cursor != null) {
+                while (activeDates.contains(cursor)) {
+                    streak++;
+                    cursor = cursor.minusDays(1);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Could not calculate streak for user {}: {}", user.getId(), e.getMessage());
+        }
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -220,6 +260,7 @@ public class AuthService implements IAuthService {
                 .avatarUrl(user.getAvatarUrl())
                 .bio(user.getBio())
                 .audiophileRank(user.getAudiophileRank())
+                .streakDays(streak)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

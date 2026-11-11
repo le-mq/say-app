@@ -32,7 +32,7 @@ const CURATED_STICKERS = [
   { id: 'Rain Drops', label: 'Rain', icon: CloudRain, color: 'text-sky-400' },
   { id: 'Star Shimmer', label: 'Sparkle', icon: Sparkles, color: 'text-cyan-300' },
   { id: 'Heartbeat', label: 'Heart', icon: Heart, color: 'text-rose-400' },
-  { id: 'Flame Seal', label: 'Flame', icon: Flame, color: 'text-[#00594c]' },
+  { id: 'Flame Seal', label: 'Flame', icon: Flame, color: 'text-cyan-300' },
 ];
 
 export default function PersonalContentEditor({

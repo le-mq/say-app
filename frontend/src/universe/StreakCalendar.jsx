@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Flame, Calendar, Trophy, ChevronLeft, ChevronRight, Music, Play } from 'lucide-react';
 import { authService } from '../services/authService';
+import { calculateCurrentStreak } from '../utils/streakUtils';
 
 export default function StreakCalendar({
   userId,
@@ -75,7 +76,7 @@ export default function StreakCalendar({
   }, [userNotes, year, month]);
 
   // Real Habit Streak: Only turns warm golden starlight amber when user sustains >= 7 consecutive days
-  const actualStreak = streakData?.currentStreakDays ?? 0;
+  const actualStreak = streakData?.currentStreakDays ?? calculateCurrentStreak(userNotes) ?? 0;
   const isHotStreak = actualStreak >= 7;
 
   // Helper for GitHub-style graduated intensity level

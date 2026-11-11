@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Link as LinkIcon, RefreshCw, Check, AlertCircle, X, Music, Radio, Sparkles } from 'lucide-react';
 import { musicService, formatTime } from '../../services/musicService';
 import { toast } from 'react-toastify';
@@ -17,6 +17,23 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Listen to real duration detected by the YouTube player for accurate display
+  const [detectedDuration, setDetectedDuration] = useState(null);
+  useEffect(() => {
+    setDetectedDuration(null);
+  }, [selectedTrack?.id, selectedTrack?.externalSongUrl]);
+  useEffect(() => {
+    const handleDurationDetected = (e) => {
+      const dur = e?.detail?.duration;
+      if (dur && dur > 0) setDetectedDuration(dur);
+    };
+    window.addEventListener('say_track_duration_detected', handleDurationDetected);
+    return () => window.removeEventListener('say_track_duration_detected', handleDurationDetected);
+  }, []);
+
+  // Best available duration: player-detected > resolved > nothing (don't show wrong fallback)
+  const displayDuration = detectedDuration || (selectedTrack?.duration > 60 ? selectedTrack.duration : null);
 
   // Auto-resolve YouTube URL
   const handleResolveYoutubeUrl = async (customUrl) => {
@@ -38,7 +55,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
       if (resolved) {
         const enriched = {
           ...resolved,
-          duration: resolved.duration || 240, // 4-minute scrubber window for custom 30s selection
+          duration: resolved.duration || null, // Don't fake duration — wait for YouTube player to detect real value
           snippetDuration: 30,
           platform: 'YOUTUBE',
         };
@@ -54,7 +71,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
           artistName: 'YouTube Creator',
           songImageUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
           externalSongUrl: `https://www.youtube.com/watch?v=${videoId}`,
-          duration: 240,
+          duration: null, // Will be detected by YouTube player
           snippetDuration: 30,
           platform: 'YOUTUBE',
         };
@@ -192,11 +209,15 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
                 {selectedTrack.artistName}
               </p>
               <div className="flex items-center gap-2 mt-0.5">
-                {selectedTrack.duration && (
+                {displayDuration ? (
                   <span className="text-[10px] font-mono text-slate-400">
-                    {formatTime(selectedTrack.duration)}
+                    {formatTime(displayDuration)}
                   </span>
-                )}
+                ) : selectedTrack?.platform === 'YOUTUBE' ? (
+                  <span className="text-[10px] font-mono text-slate-500 italic animate-pulse">
+                    Loading duration...
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>

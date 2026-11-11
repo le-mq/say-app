@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { playbackService } from '../services/MusicPlaybackService';
 
 let currentPlaylist = [];
@@ -125,18 +125,49 @@ export const playerStore = {
   seekSnippet: (startSec, duration, autoPlay = null) => {
     playbackService.seekSnippet(startSec, duration, autoPlay);
   },
+  setSnippetDuration: (duration) => {
+    playbackService.setSnippetDuration(duration);
+  },
 };
 
-export function usePlayerStore() {
-  const [snapshot, setSnapshot] = useState(playerStore.getState());
+export function usePlayerStore(selector = (s) => s) {
+  const [selectedState, setSelectedState] = useState(() => selector(playerStore.getState()));
+  const selectorRef = useRef(selector);
+  selectorRef.current = selector;
+  const prevStateRef = useRef(selectedState);
 
   useEffect(() => {
-    const unsubscribe = playerStore.subscribe(setSnapshot);
+    const unsubscribe = playerStore.subscribe((newFullState) => {
+      const nextSelected = selectorRef.current(newFullState);
+      const prev = prevStateRef.current;
+      let hasChanged = false;
+      if (typeof nextSelected !== 'object' || nextSelected === null) {
+        hasChanged = nextSelected !== prev;
+      } else {
+        const prevKeys = Object.keys(prev || {});
+        const nextKeys = Object.keys(nextSelected);
+        if (prevKeys.length !== nextKeys.length) {
+          hasChanged = true;
+        } else {
+          for (const key of nextKeys) {
+            if (prev[key] !== nextSelected[key]) {
+              hasChanged = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (hasChanged) {
+        prevStateRef.current = nextSelected;
+        setSelectedState(nextSelected);
+      }
+    });
     return unsubscribe;
   }, []);
 
   return {
-    ...snapshot,
+    ...selectedState,
     loadTrack: playerStore.loadTrack,
     playTrack: playerStore.playTrack,
     togglePlay: playerStore.togglePlay,
@@ -150,5 +181,6 @@ export function usePlayerStore() {
     playNextTrack: playerStore.playNextTrack,
     playPrevTrack: playerStore.playPrevTrack,
     setPlaylist: playerStore.setPlaylist,
+    setSnippetDuration: playerStore.setSnippetDuration,
   };
 }

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import { 
   Play, Pause, Heart, Bookmark, MessageSquare, Plus, 
   ExternalLink, Disc, Disc3, Orbit, Sparkles, Flame, Coffee, 
-  Waves, Music, Users, Headphones, CloudRain, Star, Radio, Moon
+  Waves, Music, Users, Headphones, CloudRain, Star, Radio, Moon, Globe
 } from 'lucide-react';
 import { formatTime } from '../services/musicService';
 import { formatTimeDetails } from '../utils/timeFormat';
@@ -24,11 +24,24 @@ export default function MusicNoteCard({
   const [replySongTitle, setReplySongTitle] = useState('');
   const [replyText, setReplyText] = useState('');
   const [replies, setReplies] = useState(note?.dialogues || []);
+  const svgGalaxyRef = useRef(null);
 
-  const { currentTrack, isPlaying: globalIsPlaying, playTrack, togglePlay } = usePlayerStore();
+  const { currentTrackId, globalIsPlaying, playTrack, togglePlay } = usePlayerStore(
+    (s) => ({ currentTrackId: s.currentTrack?.id, globalIsPlaying: s.isPlaying })
+  );
   const isCardPlaying = typeof isPlaying === 'boolean' && isPlaying
     ? true
-    : (currentTrack?.id === note?.id && globalIsPlaying);
+    : (currentTrackId === note?.id && globalIsPlaying);
+
+  useEffect(() => {
+    if (svgGalaxyRef.current) {
+      if (isCardPlaying) {
+        try { svgGalaxyRef.current.unpauseAnimations(); } catch (_) {}
+      } else {
+        try { svgGalaxyRef.current.pauseAnimations(); } catch (_) {}
+      }
+    }
+  }, [isCardPlaying]);
 
   useEffect(() => {
     setLikes(note?.likesCount ?? note?.likes ?? 0);
@@ -274,8 +287,8 @@ export default function MusicNoteCard({
         </div>
       ),
       'Flame Seal': (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-950 via-[#0a2335] to-[#04121c] border-2 border-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.7)] flex items-center justify-center">
-          <Flame className="w-4 h-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#021827] via-[#052236] to-[#09354d] border-2 border-cyan-400 shadow-[0_0_14px_rgba(34,211,238,0.7)] flex items-center justify-center">
+          <Flame className="w-4 h-4 text-cyan-300 drop-shadow-[0_0_8px_rgba(56,189,248,0.9)]" />
         </div>
       ),
       'Zen Leaf': (
@@ -301,20 +314,41 @@ export default function MusicNoteCard({
     );
   };
 
+  const isFriendsOnly = (note?.visibility || '').toUpperCase() === 'FRIENDS' || (note?.visibility || '').toUpperCase() === 'FRIENDS_ONLY';
+
   return (
     <article 
       onClick={handleCardClick}
-      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)] overflow-hidden ${
+      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 overflow-hidden ${
+        isFriendsOnly
+          ? 'border-2 border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.2),0_20px_50px_rgba(0,0,0,0.85)] ring-1 ring-emerald-400/40'
+          : 'border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
+      } ${
         compact ? 'h-[360px] p-3' : 'h-[500px]'
       } ${
         isActive 
-          ? 'opacity-100 ring-1 ring-sky-400/40' 
+          ? 'opacity-100' 
           : 'opacity-85 hover:opacity-100'
       }`}
     >
-      {/* SAY Ambient Navy & Petrol Blue radial glows */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(0,89,76,0.2)_0%,transparent_60%)] pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(56,189,248,0.12)_0%,transparent_50%)] pointer-events-none" />
+      {/* Harmonized ambient backlight identical to Right/Left panels */}
+      <div 
+        className="absolute -top-12 -right-12 w-48 h-48 rounded-full filter blur-3xl opacity-20 pointer-events-none transition-all duration-1000 group-hover/notecard:opacity-30"
+        style={{
+          background: isFriendsOnly
+            ? 'radial-gradient(circle, rgba(52,211,153,0.25) 0%, rgba(0,89,76,0.15) 50%, transparent 100%)'
+            : 'radial-gradient(circle, rgba(56,189,248,0.18) 0%, rgba(0,89,76,0.12) 50%, transparent 100%)'
+        }}
+      />
+
+      {isFriendsOnly && (
+        <div 
+          className="absolute -top-8 -left-8 w-36 h-36 rounded-full filter blur-3xl opacity-20 pointer-events-none"
+          style={{
+            background: 'radial-gradient(circle, rgba(52,211,153,0.35) 0%, transparent 70%)'
+          }}
+        />
+      )}
       
       {/* 1. HEADER: User Identity, Time & Emotion Tag (Chapter 4.7) */}
       <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-sky-500/20 shrink-0">
@@ -351,12 +385,17 @@ export default function MusicNoteCard({
           </div>
         </div>
 
-        {/* Visibility & Emotion Tag */}
+        {/* Prominent Visibility Badge & Emotion Tag */}
         <div className="flex items-center gap-1.5 shrink-0">
-          {note.visibility === 'FRIENDS' && (
-            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#0a2338] text-sky-200 border border-sky-400/40 flex items-center gap-1">
-              <Users className="w-2.5 h-2.5 text-sky-300" />
-              <span>Friends</span>
+          {isFriendsOnly ? (
+            <span className="text-[9.5px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-400/70 shadow-[0_0_10px_rgba(52,211,153,0.35)] flex items-center gap-1 shrink-0">
+              <Users className="w-3 h-3 text-emerald-400" />
+              <span>Friends Only</span>
+            </span>
+          ) : (
+            <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-[#0a1e30]/80 text-[#91B9C5]/80 border border-sky-500/20 flex items-center gap-1 shrink-0">
+              <Globe className="w-2.5 h-2.5 text-sky-400" />
+              <span>Public</span>
             </span>
           )}
           {note.emotionTag && (
@@ -471,7 +510,7 @@ export default function MusicNoteCard({
 
         {/* TEMPLATE B: CASSETTE TAPE (Memory Anchors Acrylic Tape) */}
         {template === 'CASSETTE' && (
-          <div className="relative w-full h-[230px] bg-[#101724]/90 backdrop-blur-md text-[#E8EEF0] p-3 rounded-2xl border-2 border-white/20 shadow-[0_16px_36px_rgba(0,0,0,0.65)] font-mono flex flex-col justify-between overflow-hidden">
+          <div className="relative w-full h-[230px] bg-[#071421]/90 backdrop-blur-md text-[#E8EEF0] p-3 rounded-2xl border border-sky-400/30 shadow-[0_16px_36px_rgba(0,0,0,0.65)] font-mono flex flex-col justify-between overflow-hidden">
             {renderStickerSeal()}
 
             {/* 4 Precision Metal Screws in Corners */}
@@ -801,78 +840,177 @@ export default function MusicNoteCard({
               </span>
             </div>
 
-            {/* Main Cosmic Stage: 3D Oblique Star-Belt & Tilted Orbital Plane (Zero Obscuring Cards) */}
-            <div className="relative z-10 w-full h-[145px] flex items-center justify-center overflow-hidden [perspective:850px]">
+            {/* Main Cosmic Stage: Precision Tilted Elliptical Orbits & Spherical Celestial Bodies (Zero Flattening, Zero Drift) */}
+            <div className="relative z-10 w-full h-[145px] flex items-center justify-center overflow-hidden">
               
-              {/* 1. Diagonal Milky Way Stardust Lane (Dãy sao ngân hà xéo) */}
-              <div 
-                className="absolute w-[360px] h-[70px] -rotate-15 pointer-events-none opacity-45 blur-lg"
-                style={{
-                  background: 'radial-gradient(ellipse at center, rgba(56,189,248,0.3) 0%, rgba(99,102,241,0.18) 45%, transparent 75%)'
-                }}
-              />
-              <div 
-                className="absolute w-[300px] h-[1.5px] -rotate-15 pointer-events-none opacity-60"
-                style={{
-                  background: 'linear-gradient(90deg, transparent 0%, rgba(186,230,253,0.85) 50%, transparent 100%)'
-                }}
-              />
-
-              {/* Twinkling Stardust Constellations along the belt */}
-              <div className="absolute top-5 left-14 w-1.5 h-1.5 rounded-full bg-cyan-200 shadow-[0_0_8px_rgba(56,189,248,0.9)] animate-pulse pointer-events-none" />
-              <div className="absolute bottom-5 right-16 w-1.5 h-1.5 rounded-full bg-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.9)] animate-ping pointer-events-none" />
-              <div className="absolute top-8 right-28 w-1 h-1 rounded-full bg-white/90 pointer-events-none" />
-              <div className="absolute bottom-8 left-24 w-1 h-1 rounded-full bg-purple-300/90 pointer-events-none" />
-
-              {/* 2. 3D Tilted Orbital Plane (Góc nhìn xéo nghệ thuật, không giống đĩa phẳng) */}
-              <div 
-                className="relative w-[320px] h-[320px] flex items-center justify-center pointer-events-none"
-                style={{
-                  transform: 'rotateX(68deg) rotateZ(-22deg)',
-                  transformStyle: 'preserve-3d',
-                }}
+              {/* SVG Mathematical Orbit System */}
+              <svg 
+                ref={svgGalaxyRef}
+                viewBox="0 0 360 145" 
+                className="w-full h-full pointer-events-none select-none"
               >
-                {/* Concentric Elliptical Orbit Rings Revolving in 3D */}
-                <div className={`relative w-full h-full flex items-center justify-center ${isCardPlaying ? 'animate-spin-slow' : ''}`}>
+                <defs>
+                  {/* Planetary 3D Spherical Radial Gradients (100% Round Spheres) */}
+                  <radialGradient id={`grad-mars-${note.id}`} cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#FDA4AF" />
+                    <stop offset="60%" stopColor="#E11D48" />
+                    <stop offset="100%" stopColor="#881337" />
+                  </radialGradient>
+                  <radialGradient id={`grad-earth-${note.id}`} cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#BAE6FD" />
+                    <stop offset="45%" stopColor="#38BDF8" />
+                    <stop offset="80%" stopColor="#0284C7" />
+                    <stop offset="100%" stopColor="#082F49" />
+                  </radialGradient>
+                  <radialGradient id={`grad-jupiter-${note.id}`} cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#FEF08A" />
+                    <stop offset="50%" stopColor="#F59E0B" />
+                    <stop offset="100%" stopColor="#78350F" />
+                  </radialGradient>
+                  <radialGradient id={`grad-saturn-${note.id}`} cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#FEF9C3" />
+                    <stop offset="55%" stopColor="#FBBF24" />
+                    <stop offset="100%" stopColor="#B45309" />
+                  </radialGradient>
+                  <radialGradient id={`grad-neptune-${note.id}`} cx="35%" cy="35%" r="65%">
+                    <stop offset="0%" stopColor="#99F6E4" />
+                    <stop offset="60%" stopColor="#0D9488" />
+                    <stop offset="100%" stopColor="#134E4A" />
+                  </radialGradient>
+                  <filter id={`planet-glow-${note.id}`} x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur" />
+                    <feMerge>
+                      <feMergeNode in="blur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
+                </defs>
+
+                {/* Diagonal Milky Way Stardust Lane */}
+                <line 
+                  x1="10" y1="125" x2="350" y2="20" 
+                  stroke="rgba(56,189,248,0.25)" 
+                  strokeWidth="2" 
+                  filter={`url(#planet-glow-${note.id})`} 
+                />
+                <line 
+                  x1="40" y1="135" x2="320" y2="10" 
+                  stroke="rgba(147,197,253,0.12)" 
+                  strokeWidth="26" 
+                  strokeLinecap="round" 
+                />
+
+                {/* Tilted Elliptical Coordinate System (-14 deg) */}
+                <g transform="rotate(-14 180 72)">
                   
-                  {/* Outer Orbit (Neptune Orbit) */}
-                  <div className="absolute w-[295px] h-[295px] rounded-full border border-sky-400/25 shadow-[0_0_12px_rgba(56,189,248,0.15)]" />
-                  {/* Neptune Planet */}
-                  <div className="absolute top-[28px] left-[70px] w-3 h-3 rounded-full bg-gradient-to-tr from-teal-400 to-sky-300 shadow-[0_0_10px_rgba(45,212,191,0.9)] ring-1 ring-white/60" />
+                  {/* Orbit 5: Neptune Path */}
+                  <path 
+                    id={`orbit-5-${note.id}`} 
+                    d="M 180, 11 a 170, 61 0 1,0 0.01,0 Z" 
+                    fill="none" 
+                    stroke="rgba(45,212,191,0.25)" 
+                    strokeWidth="1" 
+                    strokeDasharray="4,4" 
+                  />
 
-                  {/* Orbit 4 (Saturn with Ring) */}
-                  <div className="absolute w-[235px] h-[235px] rounded-full border border-amber-400/25 shadow-[0_0_10px_rgba(251,191,36,0.12)]" />
-                  {/* Saturn Planet with Ring */}
-                  <div className="absolute bottom-[36px] right-[48px] flex items-center justify-center">
-                    <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-amber-200 via-amber-400 to-yellow-600 shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
-                    <div className="absolute w-6 h-2 border border-amber-300 rounded-full -rotate-12 pointer-events-none" />
-                  </div>
+                  {/* Orbit 4: Saturn Path */}
+                  <path 
+                    id={`orbit-4-${note.id}`} 
+                    d="M 180, 21 a 142, 51 0 1,0 0.01,0 Z" 
+                    fill="none" 
+                    stroke="rgba(251,191,36,0.25)" 
+                    strokeWidth="1" 
+                    strokeDasharray="4,4" 
+                  />
 
-                  {/* Orbit 3 (Jupiter) */}
-                  <div className="absolute w-[180px] h-[180px] rounded-full border border-sky-300/25 shadow-[0_0_8px_rgba(56,189,248,0.1)]" />
-                  {/* Jupiter Planet */}
-                  <div className="absolute top-[38px] right-[45px] w-4 h-4 rounded-full bg-gradient-to-tr from-amber-700 via-orange-400 to-amber-200 shadow-[0_0_10px_rgba(245,158,11,0.8)] ring-1 ring-amber-300/50" />
+                  {/* Orbit 3: Jupiter Path */}
+                  <path 
+                    id={`orbit-3-${note.id}`} 
+                    d="M 180, 31 a 112, 41 0 1,0 0.01,0 Z" 
+                    fill="none" 
+                    stroke="rgba(56,189,248,0.25)" 
+                    strokeWidth="1" 
+                    strokeDasharray="4,4" 
+                  />
 
-                  {/* Orbit 2 (Earth + Moon) */}
-                  <div className="absolute w-[130px] h-[130px] rounded-full border border-teal-400/30 shadow-[0_0_8px_rgba(20,184,166,0.15)]" />
-                  {/* Earth + Moon */}
-                  <div className="absolute bottom-[18px] left-[30px] flex items-center">
-                    <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-tr from-[#00594c] via-sky-400 to-sky-200 shadow-[0_0_10px_rgba(56,189,248,1)] ring-1 ring-white/80" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-slate-200 ml-0.5 shadow-sm" />
-                  </div>
+                  {/* Orbit 2: Earth Path */}
+                  <path 
+                    id={`orbit-2-${note.id}`} 
+                    d="M 180, 41 a 82, 31 0 1,0 0.01,0 Z" 
+                    fill="none" 
+                    stroke="rgba(20,184,166,0.3)" 
+                    strokeWidth="1.2" 
+                    strokeDasharray="3,3" 
+                  />
 
-                  {/* Orbit 1 (Mars) */}
-                  <div className="absolute w-[90px] h-[90px] rounded-full border border-rose-400/30" />
-                  {/* Mars Planet */}
-                  <div className="absolute top-[14px] left-[28px] w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-rose-600 to-red-400 shadow-[0_0_8px_rgba(244,63,94,0.9)]" />
+                  {/* Orbit 1: Mars Path */}
+                  <path 
+                    id={`orbit-1-${note.id}`} 
+                    d="M 180, 51 a 54, 21 0 1,0 0.01,0 Z" 
+                    fill="none" 
+                    stroke="rgba(244,63,94,0.3)" 
+                    strokeWidth="1" 
+                    strokeDasharray="3,3" 
+                  />
 
-                </div>
-              </div>
+                  {/* Planet 5: Neptune (Round 3D Sphere on Orbit 5) */}
+                  <g filter={`url(#planet-glow-${note.id})`}>
+                    <circle r="3" fill={`url(#grad-neptune-${note.id})`}>
+                      <animateMotion dur="38s" repeatCount="indefinite">
+                        <mpath href={`#orbit-5-${note.id}`} />
+                      </animateMotion>
+                    </circle>
+                  </g>
 
-              {/* 3. Upright Central Solar Star (Sun / Galactic Core facing viewer) */}
+                  {/* Planet 4: Saturn with Tilted Ring on Orbit 4 */}
+                  <g filter={`url(#planet-glow-${note.id})`}>
+                    <g>
+                      <animateMotion dur="26s" repeatCount="indefinite">
+                        <mpath href={`#orbit-4-${note.id}`} />
+                      </animateMotion>
+                      <circle r="4" fill={`url(#grad-saturn-${note.id})`} />
+                      <ellipse rx="7" ry="2.2" stroke="#FDE047" strokeWidth="1" fill="none" transform="rotate(-18)" />
+                    </g>
+                  </g>
+
+                  {/* Planet 3: Jupiter on Orbit 3 */}
+                  <g filter={`url(#planet-glow-${note.id})`}>
+                    <g>
+                      <animateMotion dur="18s" repeatCount="indefinite">
+                        <mpath href={`#orbit-3-${note.id}`} />
+                      </animateMotion>
+                      <circle r="4.5" fill={`url(#grad-jupiter-${note.id})`} />
+                      <line x1="-3.5" y1="0" x2="3.5" y2="0" stroke="#78350F" strokeWidth="1" />
+                    </g>
+                  </g>
+
+                  {/* Planet 2: Earth & Moon on Orbit 2 */}
+                  <g filter={`url(#planet-glow-${note.id})`}>
+                    <g>
+                      <animateMotion dur="12s" repeatCount="indefinite">
+                        <mpath href={`#orbit-2-${note.id}`} />
+                      </animateMotion>
+                      <circle r="3.5" fill={`url(#grad-earth-${note.id})`} />
+                      <circle cx="5" cy="-2" r="1.2" fill="#E2E8F0" />
+                    </g>
+                  </g>
+
+                  {/* Planet 1: Mars on Orbit 1 */}
+                  <g filter={`url(#planet-glow-${note.id})`}>
+                    <circle r="2.8" fill={`url(#grad-mars-${note.id})`}>
+                      <animateMotion dur="7s" repeatCount="indefinite">
+                        <mpath href={`#orbit-1-${note.id}`} />
+                      </animateMotion>
+                    </circle>
+                  </g>
+
+                </g>
+              </svg>
+
+              {/* Upright Central Solar Star (Sun / Galactic Core facing viewer) */}
               <div 
                 onClick={handleInternalPlay}
-                className="absolute z-20 w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 via-orange-400 to-yellow-200 shadow-[0_0_28px_rgba(251,146,60,0.95)] border-2 border-amber-300 flex items-center justify-center cursor-pointer group/sun hover:scale-110 transition-transform"
+                className="absolute z-20 w-13 h-13 rounded-full p-0.5 bg-gradient-to-tr from-amber-500 via-orange-400 to-yellow-200 shadow-[0_0_28px_rgba(251,146,60,0.95)] border-2 border-amber-300 flex items-center justify-center cursor-pointer group/sun hover:scale-110 transition-transform"
                 title={isCardPlaying ? "Pause Cosmic Orbit" : "Play Cosmic Orbit"}
               >
                 <img
@@ -884,10 +1022,10 @@ export default function MusicNoteCard({
                 <button
                   type="button"
                   onClick={handleInternalPlay}
-                  className="absolute inset-0 m-auto w-6 h-6 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center shadow-lg transition-transform hover:scale-115 cursor-pointer z-30"
+                  className="absolute inset-0 m-auto w-5.5 h-5.5 rounded-full bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center shadow-lg transition-transform hover:scale-115 cursor-pointer z-30"
                   title={isCardPlaying ? "Pause Cosmic Orbit" : "Play Cosmic Orbit"}
                 >
-                  {isCardPlaying ? <Pause className="w-3 h-3 fill-current" /> : <Play className="w-3 h-3 fill-current ml-0.5" />}
+                  {isCardPlaying ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
                 </button>
               </div>
 
