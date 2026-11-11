@@ -90,7 +90,7 @@ export const musicService = {
     };
   },
 
-  // Zero-token Instant YouTube metadata resolution via YouTube oEmbed CDN (0 API units)
+  // Zero-token Instant YouTube metadata resolution with true duration lookup
   resolveYoutubeUrl: async (url) => {
     const videoId = musicService.extractYoutubeId(url);
     if (!videoId) return null;
@@ -98,39 +98,92 @@ export const musicService = {
     const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     const cleanUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-    try {
-      const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(cleanUrl)}`);
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (!data || !data.title) return null;
-
-      const { songTitle, artistName } = musicService.cleanMetadata(data.title, data.author_name);
-
-      let durationSec = null;
-      // Instant precision duration lookup via free iTunes audio catalog
+    // 1. Fast parallel lookup: Check backend and noembed concurrently
+    const backendPromise = (async () => {
       try {
-        const queryTerm = `${songTitle} ${artistName}`.trim();
-        const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&entity=song&limit=1`);
-        if (itunesRes.ok) {
-          const itunesData = await itunesRes.json();
-          if (itunesData.results && itunesData.results.length > 0 && itunesData.results[0].trackTimeMillis) {
-            durationSec = Math.round(itunesData.results[0].trackTimeMillis / 1000);
-          }
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4500); // 4.5s — allow for Spring Boot warm-up
+        const detailsRes = await api.get(`/music/search/details?videoId=${videoId}`, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        const details = detailsRes?.data?.data || detailsRes?.data;
+        if (details && details.songTitle) {
+          const cleaned = musicService.cleanMetadata(details.songTitle, details.artistName);
+          const durationSec = details.durationMs ? Math.round(details.durationMs / 1000) : null;
+          return {
+            id: `yt_${videoId}`,
+            youtubeId: videoId,
+            songTitle: cleaned.songTitle,
+            artistName: cleaned.artistName,
+            songImageUrl: details.songImageUrl || thumbnailUrl,
+            externalSongUrl: cleanUrl,
+            duration: durationSec,
+            platform: 'YOUTUBE',
+          };
         }
-      } catch {}
-
-      return {
-        id: `yt_${videoId}`,
-        songTitle,
-        artistName,
-        songImageUrl: thumbnailUrl,
-        externalSongUrl: cleanUrl,
-        duration: durationSec, // Exact track duration in seconds
-        platform: 'YOUTUBE',
-      };
-    } catch {
+      } catch (_) {}
       return null;
-    }
+    })();
+
+    const noembedPromise = (async () => {
+      try {
+        const res = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(cleanUrl)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (!data || !data.title) return null;
+
+        const { songTitle, artistName } = musicService.cleanMetadata(data.title, data.author_name);
+        return {
+          id: `yt_${videoId}`,
+          youtubeId: videoId,
+          songTitle,
+          artistName,
+          songImageUrl: thumbnailUrl,
+          externalSongUrl: cleanUrl,
+          duration: null,
+          platform: 'YOUTUBE',
+        };
+      } catch {
+        return null;
+      }
+    })();
+
+    try {
+      // Race for fastest title/artist resolution — both run in parallel
+      const fastest = await Promise.race([backendPromise, noembedPromise]);
+      if (fastest && fastest.songTitle) {
+        // If backend already gave us exact duration, return immediately!
+        if (fastest.duration) return fastest;
+
+        // If noembed won the race but no duration yet, give backend up to 3 more seconds
+        const finalBackend = await Promise.race([
+          backendPromise,
+          new Promise((resolve) => setTimeout(resolve, 3000))
+        ]);
+
+        if (finalBackend && finalBackend.duration) {
+          return { ...fastest, ...finalBackend };
+        }
+
+        // Last resort: iTunes catalog duration lookup (only if not clearly YouTube-only content)
+        try {
+          const queryTerm = `${fastest.songTitle} ${fastest.artistName}`.trim();
+          const itunesRes = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(queryTerm)}&entity=song&limit=1`);
+          if (itunesRes.ok) {
+            const itunesData = await itunesRes.json();
+            if (itunesData.results?.[0]?.trackTimeMillis) {
+              fastest.duration = Math.round(itunesData.results[0].trackTimeMillis / 1000);
+            }
+          }
+        } catch (_) {}
+
+        return fastest;
+      }
+
+      // If fastest didn't finish, await both
+      const [backendResult, noembedResult] = await Promise.all([backendPromise, noembedPromise]);
+      if (backendResult) return backendResult;
+      if (noembedResult) return noembedResult;
+    } catch (_) {}
   },
 };
 

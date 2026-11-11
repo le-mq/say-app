@@ -117,8 +117,8 @@ export default function LoginModal() {
                     avatarUrl: authenticatedUser.avatarUrl || null,
                     audiophileRank: authenticatedUser.audiophileRank || "Novice Listener",
                     bio: authenticatedUser.bio || "Curating timeless records on SAY.",
-                    streakDays: authenticatedUser.streakDays || 1,
-                    bestStreakDays: authenticatedUser.bestStreakDays || 1,
+                    streakDays: authenticatedUser.streakDays ?? 0,
+                    bestStreakDays: authenticatedUser.bestStreakDays ?? authenticatedUser.streakDays ?? 0,
                     notesCount: authenticatedUser.notesCount || 0,
                   };
                   setUser(safeUser);
@@ -237,8 +237,8 @@ export default function LoginModal() {
       avatarUrl: tempUser.avatarUrl || null,
       audiophileRank: tempUser.audiophileRank || "Novice Listener",
       bio: tempUser.bio || "Curating timeless records on SAY.",
-      streakDays: tempUser.streakDays || 1,
-      bestStreakDays: tempUser.bestStreakDays || 1,
+      streakDays: tempUser.streakDays ?? 0,
+      bestStreakDays: tempUser.bestStreakDays ?? tempUser.streakDays ?? 0,
       notesCount: tempUser.notesCount || 0,
     };
 

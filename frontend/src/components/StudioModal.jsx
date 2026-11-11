@@ -7,12 +7,13 @@ import TemplateSelector from './composer/TemplateSelector';
 import TrackSelector from './composer/TrackSelector';
 import AudioSnippetSelector from './composer/AudioSnippetSelector';
 import PersonalContentEditor from './composer/PersonalContentEditor';
-import { X, Sparkles, Send, Eye, AlertCircle } from 'lucide-react';
+import { X, Sparkles, Send, Eye, Volume2, Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { formatTime } from '../services/musicService';
 
 export default function StudioModal({ onNoteCreated }) {
   const { user, isStudioOpen, setStudioOpen } = useAuthStore();
-  const { setLooping, stopTrack, loadTrack } = usePlayerStore();
+  const { setLooping, stopTrack, playTrack, pauseTrack, isPlaying, currentTrack } = usePlayerStore();
 
   // Stop background feed music immediately whenever the Studio Modal is opened
   useEffect(() => {
@@ -54,20 +55,22 @@ export default function StudioModal({ onNoteCreated }) {
     setVisibility('PUBLIC');
   };
 
-  // Real-time Preview Note Object (Chapter 8.2)
+  // Real-time Preview Note Object
   const previewNote = useMemo(() => ({
     id: 'studio-preview-id',
     userDisplayName: user?.displayName || 'Audiophile',
-    handle: user?.handle || '@listener',
+    handle: user?.handle || (user?.username ? `@${user.username}` : '@listener'),
     userAvatarUrl: user?.avatarUrl,
     timeAgo: 'Just now',
-    songTitle: selectedTrack?.songTitle || 'Select a Song to Preview',
-    artistName: selectedTrack?.artistName || 'Artist Name',
+    songTitle: selectedTrack?.songTitle || 'Select or Paste a Track',
+    artistName: selectedTrack?.artistName || 'Awaiting Music Link',
     songImageUrl: selectedTrack?.songImageUrl || 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=500',
     externalSongUrl: selectedTrack?.externalSongUrl || '',
+    previewAudioUrl: selectedTrack?.previewAudioUrl || selectedTrack?.externalSongUrl || '',
     audioSnippetStart: snippetStart,
     audioSnippetEnd: snippetStart + snippetDuration,
-    templateType,
+    snippetDuration,
+    templateType: `${templateType}:${snippetDuration}`,
     emotionTag,
     stickerBadge,
     caption,
@@ -88,40 +91,51 @@ export default function StudioModal({ onNoteCreated }) {
     visibility,
   ]);
 
-  // Publish Note Validation & Submission (Chapter 8.9)
+  // Preview Playback State & Instant Trigger
+  const isPreviewPlaying = isPlaying && (currentTrack?.id === previewNote.id || currentTrack?.externalSongUrl === previewNote.externalSongUrl);
+
+  const handlePreviewPlayToggle = (e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!selectedTrack?.externalSongUrl) {
+      toast.info("Please search or paste a music track link first to test audio playback.");
+      return;
+    }
+    if (isPreviewPlaying) {
+      pauseTrack();
+    } else {
+      playTrack(previewNote, { snippetStart, snippetDuration, loop: true });
+    }
+  };
+
+  // Publish Note Validation & Submission
   const handlePublishNote = async () => {
-    // 1. Mandatory Valid Track Validation
     if (!selectedTrack || !selectedTrack.songTitle || !selectedTrack.externalSongUrl) {
       toast.error('Please search or paste a valid music track before publishing.');
       return;
     }
 
-    // 2. Authentication Check
     if (!user?.id) {
       toast.error('You must be signed in to publish a Music Note.');
       return;
     }
 
-    // 3. Template Validation
-    const validTemplates = ['RECEIPTIFY', 'CASSETTE', 'STAMP', 'VINYL'];
+    const validTemplates = ['RECEIPTIFY', 'CASSETTE', 'STAMP', 'VINYL', 'GALAXY'];
     if (!validTemplates.includes(templateType.toUpperCase())) {
       toast.error('Please choose a valid physical template.');
       return;
     }
 
-    if (!user?.id) {
-      toast.error('Please sign in to compose and publish a note.');
-      return;
-    }
-
     setIsSubmitting(true);
+
+    const cleanUrl = selectedTrack.externalSongUrl.trim();
+    const finalUrl = cleanUrl.includes('#') ? cleanUrl : `${cleanUrl}#snippetDur=${snippetDuration}`;
 
     const payload = {
       userId: user.id,
       songTitle: selectedTrack.songTitle.trim(),
       artistName: selectedTrack.artistName.trim(),
       songImageUrl: selectedTrack.songImageUrl.trim(),
-      externalSongUrl: selectedTrack.externalSongUrl.trim(),
+      externalSongUrl: finalUrl,
       audioSnippetStart: Number(snippetStart) || 0,
       templateType: templateType.toUpperCase(),
       emotionTag: emotionTag.trim(),
@@ -133,7 +147,7 @@ export default function StudioModal({ onNoteCreated }) {
 
     try {
       const created = await noteService.createNote(payload);
-      toast.success(`Published "${payload.songTitle}" to your collection!`);
+      toast.success(`Published "${payload.songTitle}" to your soundscape!`);
       stopTrack();
       setLooping(false);
       resetForm();
@@ -146,7 +160,11 @@ export default function StudioModal({ onNoteCreated }) {
       setStudioOpen(false);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Failed to publish note to server';
-      toast.error(msg);
+      if (typeof msg === 'string' && msg.includes('Invalid template type: GALAXY')) {
+        toast.error('Template GALAXY đã được thêm vào mã nguồn backend. Vui lòng restart backend Spring Boot để nạp cấu hình mới!');
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -156,33 +174,50 @@ export default function StudioModal({ onNoteCreated }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-[#05111d]/90 backdrop-blur-xl overflow-hidden animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/45 backdrop-blur-md overflow-hidden animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
     >
       {/* Click outside backdrop */}
       <div className="fixed inset-0" onClick={handleClose} />
 
-      {/* Main Studio Modal Window */}
-      <div className="relative z-10 w-full max-w-[1180px] my-auto bg-[#091827] border border-[#16354d] rounded-3xl shadow-[0_25px_70px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden max-h-[92vh]">
+      {/* Main Studio Modal Window with Frosted Glassmorphism */}
+      <div className="relative z-10 w-full max-w-[1180px] my-auto bg-[#07131f]/75 backdrop-blur-2xl border border-sky-400/20 rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.1)] flex flex-col overflow-hidden max-h-[92vh]">
         
-        {/* Header Bar */}
-        <div className="px-5 sm:px-7 py-3.5 border-b border-[#132c40] flex items-center justify-between shrink-0 bg-[#06121d]">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            <h2 className="text-sm sm:text-base font-bold font-mono tracking-wider text-white uppercase">
-              Create Music Note
+        {/* Header Bar: Trendy, minimalist with Discard & Publish Note */}
+        <div className="px-6 py-4 border-b border-sky-500/20 flex items-center justify-between shrink-0 bg-[#06101a]/70 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="p-1 rounded-full text-neutral-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              title="Close modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-base sm:text-lg font-serif font-bold tracking-tight text-white">
+              Write your note
             </h2>
           </div>
 
-          <button
-            type="button"
-            onClick={handleClose}
-            className="p-1.5 rounded-full bg-[#0c1f2e] hover:bg-[#15344d] text-[#91B9C5] hover:text-white transition-colors cursor-pointer"
-            title="Close studio"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-mono text-neutral-400 hover:text-white transition-colors cursor-pointer"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={handlePublishNote}
+              disabled={isSubmitting}
+              className="px-5 py-2 rounded-xl bg-neutral-200 hover:bg-white text-neutral-900 font-mono text-xs font-bold tracking-wide transition-all shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-1.5 active:scale-95"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>{isSubmitting ? 'Publishing...' : 'Publish Note'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body: Left Column (Editor) vs Right Column (Live Preview) */}
@@ -193,7 +228,7 @@ export default function StudioModal({ onNoteCreated }) {
           {/* ============================================================== */}
           <div className="flex-1 p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain custom-scrollbar">
             
-            {/* 1. Choose Template */}
+            {/* 1. Choose Physical Template */}
             <TemplateSelector
               selectedTemplate={templateType}
               onSelectTemplate={(tpl) => setTemplateType(tpl)}
@@ -241,58 +276,42 @@ export default function StudioModal({ onNoteCreated }) {
               onVisibilityChange={setVisibility}
             />
 
-            {/* Publish Action Bar */}
-            <div className="pt-2 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="px-4 py-2.5 rounded-xl border border-[#16354d] text-xs font-mono text-[#91B9C5] hover:text-white transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePublishNote}
-                disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#07131e] font-mono text-xs font-extrabold tracking-wider shadow-lg shadow-cyan-950/60 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? 'Publishing Note...' : 'Publish Note'}</span>
-              </button>
-            </div>
-
           </div>
 
           {/* ============================================================== */}
-          {/* RIGHT COLUMN: REAL-TIME LIVE PREVIEW (Chapter 8.2)              */}
+          {/* RIGHT COLUMN: REAL-TIME LIVE PREVIEW                            */}
           {/* ============================================================== */}
-          <div className="w-full lg:w-[440px] bg-[#06121d] border-t lg:border-t-0 lg:border-l border-[#132c40] p-4 sm:p-6 flex flex-col items-center justify-between shrink-0 overflow-y-auto custom-scrollbar">
+          <div className="w-full lg:w-[460px] bg-[#05111d]/50 backdrop-blur-xl border-t lg:border-t-0 lg:border-l border-sky-500/20 p-5 sm:p-6 flex flex-col items-center justify-between shrink-0 overflow-y-auto custom-scrollbar relative">
+            <div className="absolute inset-0 bg-gradient-to-b from-[#00594c]/15 via-transparent to-sky-500/10 pointer-events-none" />
             
-            <div className="w-full flex items-center justify-between pb-3 border-b border-[#142c40] mb-3 text-xs font-mono text-[#91B9C5]">
-              <span className="font-bold flex items-center gap-1.5 uppercase text-white">
-                <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Live Note Preview</span>
+            {/* Minimalist Live Header */}
+            <div className="w-full flex items-center justify-between pb-3 border-b border-sky-500/20 text-xs font-mono text-slate-400 relative z-10">
+              <span className="font-bold tracking-wider text-sky-100 uppercase text-[11px]">
+                LIVE NOTE ARTIFACT
               </span>
-              <span className="text-[10px] text-cyan-300 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">
-                {templateType}
+              <span className="flex items-center gap-1.5 text-[10px] text-sky-300 font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00594c] shadow-[0_0_6px_rgba(0,89,76,0.9)] animate-pulse" />
+                <span>LIVE PREVIEW</span>
               </span>
             </div>
 
             {/* The Live Physical Card Rendering */}
-            <div className="w-full my-auto flex items-center justify-center">
+            <div className="w-full my-auto flex items-center justify-center py-4 relative z-10">
               <MusicNoteCard 
                 note={previewNote}
                 isActive={true}
-                isPlaying={false}
+                isPlaying={isPreviewPlaying}
+                onPlayToggle={handlePreviewPlayToggle}
               />
             </div>
 
-            {/* Helpful Studio Footer Tip */}
-            <div className="w-full pt-3 border-t border-[#142c40] mt-3 text-center">
-              <p className="text-[10px] font-mono text-[#91B9C5]/70">
-                Switching templates preserves 100% of your entered music, lyrics & caption.
-              </p>
+            {/* Minimalist Studio Footer */}
+            <div className="w-full pt-3 border-t border-sky-500/20 flex items-center justify-between text-[11px] font-mono text-slate-400 relative z-10">
+              <span>Snippet: {formatTime(snippetStart)} – {formatTime(snippetStart + snippetDuration)}</span>
+              <span className="flex items-center gap-1 text-sky-300">
+                <Volume2 className="w-3.5 h-3.5" />
+                <span>Click card to listen</span>
+              </span>
             </div>
 
           </div>

@@ -39,7 +39,9 @@ export default function GlobalPlayerDock() {
     togglePlay, 
     playTrack, 
     pauseTrack, 
-    seekTo 
+    seekTo,
+    playNextTrack,
+    playPrevTrack
   } = usePlayerStore();
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -72,11 +74,11 @@ export default function GlobalPlayerDock() {
   };
 
   const handlePrev = () => {
-    seekTo(0);
+    playPrevTrack();
   };
 
   const handleNext = () => {
-    seekTo(effectiveDuration);
+    playNextTrack();
   };
 
   return (

@@ -26,6 +26,14 @@ public class MusicSearchController {
                 .thenApply(results -> ResponseEntity.ok(ApiResponse.success("Music search results retrieved successfully", results)));
     }
 
+    @GetMapping("/details")
+    public CompletableFuture<ResponseEntity<ApiResponse<TrackSearchResponseDto>>> getVideoDetails(
+            @RequestParam String videoId
+    ) {
+        return externalMusicService.getVideoDetails(videoId)
+                .thenApply(dto -> ResponseEntity.ok(ApiResponse.success("Video details retrieved successfully", dto)));
+    }
+
     @GetMapping("/pool")
     public ResponseEntity<ApiResponse<List<TrackSearchResponseDto>>> getSharedMusicPool() {
         return ResponseEntity.ok(ApiResponse.success("Shared music pool retrieved successfully", externalMusicService.getSharedPool()));

@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
 import { noteService } from '../services/noteService';
 import { authService } from '../services/authService';
+import { calculateCurrentStreak } from '../utils/streakUtils';
 import MusicNoteCard from '../components/MusicNoteCard';
 import { 
   Flame, User, Edit3, X, Check, Disc, Play, 
-  ExternalLink, Sparkles, Globe, Music, Trash2, AlertTriangle, Image as ImageIcon
+  ExternalLink, Sparkles, Globe, Music, Trash2, AlertTriangle, Image as ImageIcon, Users
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -27,7 +28,9 @@ export default function Profile() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [notes, setNotes] = useState([]);
+  const [visibilityFilter, setVisibilityFilter] = useState('ALL'); // 'ALL' | 'PUBLIC' | 'FRIENDS_ONLY'
   const [isLoading, setIsLoading] = useState(true);
+  const [streakDays, setStreakDays] = useState(user?.streakDays ?? 0);
 
   // Edit Profile Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(searchParams.get('modal') === 'edit');
@@ -67,26 +70,32 @@ export default function Profile() {
     }
   }, [user]);
 
-  // Load public notes belonging to this user
+  // Load all published notes belonging to this user (Public and Friends Circle)
   useEffect(() => {
     let isMounted = true;
 
-    async function loadPublicNotes() {
+    async function loadUserNotes() {
       setIsLoading(true);
       try {
         if (user?.id) {
           const res = await noteService.getUserNotes(user.id);
           const userNotes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
-          // Chapter 7.3: Profile ONLY contains Public Music Notes! Filter out FRIENDS_ONLY / PRIVATE
-          const publicOnly = userNotes.filter((n) => (n.visibility || 'PUBLIC').toUpperCase() === 'PUBLIC');
+          
+          // Calculate true streak from all user notes
+          const computedStreak = calculateCurrentStreak(userNotes);
+          setStreakDays(computedStreak);
+          if (user?.streakDays !== computedStreak) {
+            setUser({ ...user, streakDays: computedStreak });
+          }
+
           if (isMounted) {
-            setNotes(publicOnly);
+            setNotes(userNotes);
             setIsLoading(false);
             return;
           }
         }
       } catch (err) {
-        console.warn('Could not fetch user public notes from backend', err);
+        console.warn('Could not fetch user notes from backend', err);
       }
 
       if (isMounted) {
@@ -95,11 +104,44 @@ export default function Profile() {
       }
     }
 
-    loadPublicNotes();
+    loadUserNotes();
+
+    // Instant update when a new note is published from StudioModal
+    const handleNoteCreated = () => {
+      loadUserNotes();
+    };
+    window.addEventListener('say_note_created', handleNoteCreated);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('say_note_created', handleNoteCreated);
     };
   }, [user]);
+
+  // Computed visibility filters
+  const publicCount = useMemo(() => {
+    return notes.filter((n) => (n.visibility || 'PUBLIC').toUpperCase() === 'PUBLIC').length;
+  }, [notes]);
+
+  const friendsCount = useMemo(() => {
+    return notes.filter((n) => {
+      const v = (n.visibility || 'PUBLIC').toUpperCase();
+      return v === 'FRIENDS' || v === 'FRIENDS_ONLY';
+    }).length;
+  }, [notes]);
+
+  const filteredNotes = useMemo(() => {
+    if (visibilityFilter === 'PUBLIC') {
+      return notes.filter((n) => (n.visibility || 'PUBLIC').toUpperCase() === 'PUBLIC');
+    }
+    if (visibilityFilter === 'FRIENDS_ONLY') {
+      return notes.filter((n) => {
+        const v = (n.visibility || 'PUBLIC').toUpperCase();
+        return v === 'FRIENDS' || v === 'FRIENDS_ONLY';
+      });
+    }
+    return notes;
+  }, [notes, visibilityFilter]);
 
   // Handle Edit Handle validation
   const handleHandleChange = (val) => {
@@ -230,14 +272,14 @@ export default function Profile() {
               {/* Streak Badge */}
               <div
                 className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-[#081827] shadow-md flex items-center gap-1 text-[11px] font-mono font-bold border ${
-                  (user?.streakDays ?? 0) >= 7 ? 'border-orange-500/50 text-orange-400' : 'border-cyan-500/40 text-cyan-300'
+                  streakDays >= 7 ? 'border-orange-500/50 text-orange-400' : 'border-cyan-500/40 text-cyan-300'
                 }`}
                 title="Daily Music Note Streak"
               >
                 <Flame className={`w-3 h-3 ${
-                  (user?.streakDays ?? 0) >= 7 ? 'fill-orange-400 animate-pulse text-orange-400' : 'fill-cyan-300/30 text-cyan-300'
+                  streakDays >= 7 ? 'fill-orange-400 animate-pulse text-orange-400' : 'fill-cyan-300/30 text-cyan-300'
                 }`} />
-                <span>{user?.streakDays ?? 0}d</span>
+                <span>{streakDays}d</span>
               </div>
             </div>
 
@@ -272,50 +314,95 @@ export default function Profile() {
         </div>
       </section>
 
-      {/* 2. PUBLIC MUSIC NOTES SECTION (Chapter 7.2 & 7.3: Only Public Notes) */}
+      {/* 2. PUBLISHED MUSIC NOTES SECTION */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
         
-        {/* Section Header */}
-        <div className="flex items-center justify-between border-b border-[#13304c] pb-3">
+        {/* Section Header with Visibility Filter Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#13304c] pb-3">
           <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-cyan-300" />
+            <Music className="w-4 h-4 text-cyan-300" />
             <h2 className="text-sm font-serif font-bold text-[#E8EEF0] uppercase tracking-wider">
-              Public Music Notes
+              Published Music Notes
             </h2>
             <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#0e273d] text-cyan-300 border border-[#1b4366]">
-              {notes.length}
+              {filteredNotes.length}
             </span>
           </div>
 
-          <p className="text-[11px] text-[#91B9C5]/60 font-mono hidden sm:block">
-            Visible to the entire soundscape
-          </p>
+          {/* Visibility Filter Selector */}
+          <div className="flex items-center gap-1 bg-[#091f33] p-1 rounded-xl border border-sky-500/20 text-xs font-mono self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setVisibilityFilter('ALL')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                visibilityFilter === 'ALL'
+                  ? 'bg-[#183952] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                  : 'text-[#91B9C5]/70 hover:text-white'
+              }`}
+            >
+              All ({notes.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibilityFilter('PUBLIC')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                visibilityFilter === 'PUBLIC'
+                  ? 'bg-[#183952] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                  : 'text-[#91B9C5]/70 hover:text-white'
+              }`}
+            >
+              <Globe className="w-3 h-3" />
+              <span>Public ({publicCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisibilityFilter('FRIENDS_ONLY')}
+              className={`flex items-center gap-1 px-3 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                visibilityFilter === 'FRIENDS_ONLY'
+                  ? 'bg-[#183952] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                  : 'text-[#91B9C5]/70 hover:text-white'
+              }`}
+            >
+              <Users className="w-3 h-3" />
+              <span>Friends ({friendsCount})</span>
+            </button>
+          </div>
         </div>
 
         {/* Notes Grid */}
         {isLoading ? (
           <div className="py-16 text-center text-xs text-[#91B9C5]/60 flex items-center justify-center gap-2">
             <Disc className="w-4 h-4 animate-spin text-cyan-300" />
-            <span>Loading public notes...</span>
+            <span>Loading published notes...</span>
           </div>
-        ) : notes.length === 0 ? (
+        ) : filteredNotes.length === 0 ? (
           <div className="py-16 rounded-3xl bg-[#091d30]/50 border border-[#143552] flex flex-col items-center justify-center text-center p-6 space-y-3">
             <Music className="w-10 h-10 text-[#91B9C5]/40" />
-            <h3 className="text-sm font-bold text-[#E8EEF0]">No Public Notes Yet</h3>
+            <h3 className="text-sm font-bold text-[#E8EEF0]">
+              {visibilityFilter === 'FRIENDS_ONLY' 
+                ? 'No Friends-Only Notes' 
+                : visibilityFilter === 'PUBLIC' 
+                ? 'No Public Notes' 
+                : 'No Published Notes Yet'}
+            </h3>
             <p className="text-xs text-[#91B9C5]/70 max-w-sm">
-              You haven't published any public notes to your profile yet.
+              {visibilityFilter === 'FRIENDS_ONLY'
+                ? 'You have not published any notes with Friends-only visibility.'
+                : visibilityFilter === 'PUBLIC'
+                ? 'You have not published any notes with Public visibility.'
+                : 'Share your sonic soul by creating your first music note.'}
             </p>
             <button
               type="button"
               onClick={() => setStudioOpen(true)}
               className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#071523] text-xs font-bold transition-all shadow-md cursor-pointer"
             >
-              Create First Public Note
+              Create Note
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
-            {notes.map((note) => (
+            {filteredNotes.map((note) => (
               <MusicNoteCard
                 key={note.id}
                 note={note}

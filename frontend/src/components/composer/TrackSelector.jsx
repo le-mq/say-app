@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Link as LinkIcon, RefreshCw, Check, AlertCircle, X, Music, Radio, Sparkles } from 'lucide-react';
 import { musicService, formatTime } from '../../services/musicService';
 import { toast } from 'react-toastify';
@@ -17,6 +17,23 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+
+  // Listen to real duration detected by the YouTube player for accurate display
+  const [detectedDuration, setDetectedDuration] = useState(null);
+  useEffect(() => {
+    setDetectedDuration(null);
+  }, [selectedTrack?.id, selectedTrack?.externalSongUrl]);
+  useEffect(() => {
+    const handleDurationDetected = (e) => {
+      const dur = e?.detail?.duration;
+      if (dur && dur > 0) setDetectedDuration(dur);
+    };
+    window.addEventListener('say_track_duration_detected', handleDurationDetected);
+    return () => window.removeEventListener('say_track_duration_detected', handleDurationDetected);
+  }, []);
+
+  // Best available duration: player-detected > resolved > nothing (don't show wrong fallback)
+  const displayDuration = detectedDuration || (selectedTrack?.duration > 60 ? selectedTrack.duration : null);
 
   // Auto-resolve YouTube URL
   const handleResolveYoutubeUrl = async (customUrl) => {
@@ -38,7 +55,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
       if (resolved) {
         const enriched = {
           ...resolved,
-          duration: resolved.duration || 240, // 4-minute scrubber window for custom 30s selection
+          duration: resolved.duration || null, // Don't fake duration — wait for YouTube player to detect real value
           snippetDuration: 30,
           platform: 'YOUTUBE',
         };
@@ -54,7 +71,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
           artistName: 'YouTube Creator',
           songImageUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
           externalSongUrl: `https://www.youtube.com/watch?v=${videoId}`,
-          duration: 240,
+          duration: null, // Will be detected by YouTube player
           snippetDuration: 30,
           platform: 'YOUTUBE',
         };
@@ -159,26 +176,27 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
     <div className="space-y-3">
       {/* Step Header */}
       <div className="flex items-center justify-between">
-        <label className="text-xs font-mono font-bold uppercase tracking-wider text-[#91B9C5] flex items-center gap-1.5">
-          <span>2. Select Music Track</span>
-          <span className="text-cyan-400">*</span>
+        <label className="text-xs font-mono font-bold uppercase tracking-wider text-sky-200 flex items-center gap-1.5">
+          <span>Select Track</span>
         </label>
         {selectedTrack?.songTitle && (
-          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30 flex items-center gap-1">
-            <Check className="w-3 h-3" />
-            <span>Track Loaded</span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-mono text-sky-300 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00594c] shadow-[0_0_8px_rgba(0,89,76,0.9)] animate-pulse" />
+            <span>Track Synced</span>
           </span>
         )}
       </div>
 
       {/* Selected Track Confirmation Banner */}
       {selectedTrack?.songTitle ? (
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-[#0c2236] border border-cyan-400/50 shadow-md">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-[#091f33] border border-sky-400/30 shadow-md relative overflow-hidden">
+          {/* Subtle Aston Martin teal sheen */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#00594c]/15 via-transparent to-transparent pointer-events-none" />
+          <div className="flex items-center gap-3 min-w-0 relative z-10">
             <img
               src={selectedTrack.songImageUrl}
               alt={selectedTrack.songTitle}
-              className="w-12 h-12 rounded-xl object-cover shrink-0 border border-white/20"
+              className="w-12 h-12 rounded-xl object-cover shrink-0 border border-sky-400/30"
               onError={(e) => {
                 e.currentTarget.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=120';
               }}
@@ -191,11 +209,15 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
                 {selectedTrack.artistName}
               </p>
               <div className="flex items-center gap-2 mt-0.5">
-                {selectedTrack.duration && (
-                  <span className="text-[10px] font-mono text-[#91B9C5]/80">
-                    {formatTime(selectedTrack.duration)}
+                {displayDuration ? (
+                  <span className="text-[10px] font-mono text-slate-400">
+                    {formatTime(displayDuration)}
                   </span>
-                )}
+                ) : selectedTrack?.platform === 'YOUTUBE' ? (
+                  <span className="text-[10px] font-mono text-slate-500 italic animate-pulse">
+                    Loading duration...
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -203,7 +225,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
           <button
             type="button"
             onClick={onClearTrack}
-            className="p-1.5 rounded-lg bg-[#081724] hover:bg-rose-950 text-[#91B9C5] hover:text-rose-300 border border-[#16354d] hover:border-rose-500/40 transition-colors cursor-pointer shrink-0 ml-2"
+            className="p-1.5 rounded-lg bg-[#0a0d12] hover:bg-rose-950/60 text-neutral-400 hover:text-rose-300 border border-white/10 hover:border-rose-500/40 transition-colors cursor-pointer shrink-0 ml-2 relative z-10"
             title="Change track"
           >
             <X className="w-4 h-4" />
@@ -211,20 +233,20 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
         </div>
       ) : (
         /* Source Selector Tabs */
-        <div className="bg-[#081724] border border-[#16354d] rounded-2xl p-3 space-y-3">
+        <div className="bg-[#10141a]/95 border border-white/10 rounded-2xl p-3 space-y-3">
           
-          <div className="flex items-center gap-1 bg-[#06121d] p-1 rounded-xl border border-[#132c40]">
+          <div className="flex items-center gap-1 bg-[#0a0d12] p-1 rounded-xl border border-white/10">
             {/* Tab 1: Paste Link */}
             <button
               type="button"
               onClick={() => setActiveTab('youtube')}
               className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'youtube'
-                  ? 'bg-[#183952] text-white shadow-sm border border-cyan-400/40'
-                  : 'text-[#91B9C5]/70 hover:text-white'
+                  ? 'bg-neutral-200 text-neutral-900 shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
-              <LinkIcon className="w-3.5 h-3.5 text-cyan-300" />
+              <LinkIcon className="w-3.5 h-3.5" />
               <span>Paste Link</span>
             </button>
 
@@ -234,12 +256,12 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
               onClick={() => setActiveTab('search')}
               className={`flex-1 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                 activeTab === 'search'
-                  ? 'bg-[#183952] text-white shadow-sm border border-cyan-400/40'
-                  : 'text-[#91B9C5]/70 hover:text-white'
+                  ? 'bg-neutral-200 text-neutral-900 shadow-sm'
+                  : 'text-neutral-400 hover:text-white'
               }`}
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Search</span>
+              <span>Search Music</span>
             </button>
           </div>
 
@@ -249,7 +271,7 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
               <div className="flex items-center gap-2">
                 <input
                   type="url"
-                  placeholder="Paste YouTube, YouTube Music, Shorts, or audio URL..."
+                  placeholder="Paste any YouTube, YouTube Music or track link..."
                   value={youtubeUrl}
                   onChange={(e) => setYoutubeUrl(e.target.value)}
                   onPaste={(e) => {
@@ -265,13 +287,13 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
                       handleResolveYoutubeUrl();
                     }
                   }}
-                  className="w-full bg-[#06121d] border border-[#1b3d5b] rounded-xl px-3 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-cyan-400 font-mono placeholder:text-neutral-500"
+                  className="w-full bg-[#0a0d12] border border-white/10 rounded-xl px-3 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-white/30 font-mono placeholder:text-neutral-600"
                 />
                 <button
                   type="button"
                   onClick={() => handleResolveYoutubeUrl()}
                   disabled={isResolvingUrl || !youtubeUrl.trim()}
-                  className="px-4 py-2 bg-gradient-to-r from-cyan-500 to-[#195a89] hover:from-cyan-400 hover:to-[#206fa8] text-[#07131e] text-xs font-mono font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0 shadow-md"
+                  className="px-4 py-2 bg-neutral-200 hover:bg-white text-neutral-900 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0 shadow-sm"
                 >
                   {isResolvingUrl ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
                   <span>{isResolvingUrl ? 'Loading...' : 'Load'}</span>
@@ -291,18 +313,18 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
           {activeTab === 'search' && (
             <div className="space-y-2">
               <form onSubmit={handleSearchSubmit} className="relative flex items-center">
-                <Search className="w-4 h-4 absolute left-3 text-[#91B9C5]/60" />
+                <Search className="w-4 h-4 absolute left-3 text-neutral-500" />
                 <input
                   type="text"
                   placeholder="Search song title or artist..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-[#06121d] border border-[#1b3d5b] rounded-xl pl-9 pr-24 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-cyan-400 font-mono placeholder:text-neutral-500"
+                  className="w-full bg-[#0a0d12] border border-white/10 rounded-xl pl-9 pr-24 py-2 text-xs text-[#E8EEF0] focus:outline-none focus:border-white/30 font-mono placeholder:text-neutral-600"
                 />
                 <button
                   type="submit"
                   disabled={isSearching || !searchQuery.trim()}
-                  className="absolute right-1.5 px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-[#07131e] text-[11px] font-mono font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                  className="absolute right-1.5 px-3 py-1 bg-neutral-200 hover:bg-white text-neutral-900 text-[11px] font-mono font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
                 >
                   {isSearching ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
                   <span>{isSearching ? 'Finding...' : 'Search'}</span>
@@ -311,12 +333,12 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
 
               {/* Search Results */}
               {searchResults.length > 0 && (
-                <div className="max-h-56 overflow-y-auto space-y-1 rounded-xl bg-[#06121d] p-1.5 border border-[#16354d]">
+                <div className="max-h-56 overflow-y-auto space-y-1 rounded-xl bg-[#0a0d12] p-1.5 border border-white/10">
                   {searchResults.map((track) => (
                     <div
                       key={track.id}
                       onClick={() => confirmTrack(track)}
-                      className="flex items-center justify-between p-2 rounded-lg hover:bg-[#0c2236] cursor-pointer transition-colors group"
+                      className="flex items-center justify-between p-2 rounded-lg hover:bg-[#161c26] cursor-pointer transition-colors group"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img
@@ -325,16 +347,16 @@ export default function TrackSelector({ selectedTrack, onSelectTrack, onClearTra
                           className="w-9 h-9 rounded-md object-cover shrink-0 border border-white/10"
                         />
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-white group-hover:text-cyan-300 truncate">
+                          <p className="text-xs font-bold text-white group-hover:text-amber-200 truncate">
                             {track.songTitle}
                           </p>
-                          <p className="text-[10px] text-[#91B9C5] font-mono truncate">
+                          <p className="text-[10px] text-neutral-400 font-mono truncate">
                             {track.artistName}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className="text-[10px] font-mono font-medium text-cyan-300 bg-[#153854] group-hover:bg-cyan-500 group-hover:text-black px-2.5 py-1 rounded-lg transition-colors border border-cyan-500/20">
+                        <span className="text-[10px] font-mono font-medium text-neutral-300 bg-[#1c2432] group-hover:bg-white group-hover:text-black px-2.5 py-1 rounded-lg transition-colors border border-white/10">
                           Select
                         </span>
                       </div>

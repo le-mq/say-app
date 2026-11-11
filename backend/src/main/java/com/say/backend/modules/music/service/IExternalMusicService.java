@@ -9,6 +9,8 @@ public interface IExternalMusicService {
 
     CompletableFuture<List<TrackSearchResponseDto>> searchMusic(String query, String platform);
 
+    CompletableFuture<TrackSearchResponseDto> getVideoDetails(String videoId);
+
     List<TrackSearchResponseDto> getSharedPool();
 
     void addToSharedPool(TrackSearchResponseDto track);

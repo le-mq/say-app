@@ -59,23 +59,12 @@ public class StreakService implements IStreakService {
 
             int daysInMonth = yearMonth.lengthOfMonth();
             List<StreakDayDto> streakDays = new ArrayList<>();
-            int currentStreak = 0;
-            int maxStreak = 0;
 
             for (int day = 1; day <= daysInMonth; day++) {
                 LocalDate date = yearMonth.atDay(day);
                 Note note = notesByDay.get(day);
                 boolean hasNote = (note != null);
                 int noteCount = countsByDay.getOrDefault(day, 0L).intValue();
-
-                if (hasNote) {
-                    currentStreak++;
-                    if (currentStreak > maxStreak) {
-                        maxStreak = currentStreak;
-                    }
-                } else {
-                    currentStreak = 0;
-                }
 
                 streakDays.add(StreakDayDto.builder()
                         .dayOfMonth(day)
@@ -91,12 +80,36 @@ public class StreakService implements IStreakService {
                         .build());
             }
 
+            // Real Current Habit Streak: Consecutive days leading up to today (or yesterday if user has not posted yet today)
+            List<Note> allUserNotes = noteRepository.findByUserIdOrderByCreatedAtDesc(userId);
+            Set<LocalDate> activeDates = allUserNotes.stream()
+                    .map(n -> n.getCreatedAt().atZone(ZoneOffset.UTC).toLocalDate())
+                    .collect(Collectors.toSet());
+
+            LocalDate today = LocalDate.now(ZoneOffset.UTC);
+            LocalDate yesterday = today.minusDays(1);
+
+            int realCurrentStreak = 0;
+            LocalDate cursor = null;
+            if (activeDates.contains(today)) {
+                cursor = today;
+            } else if (activeDates.contains(yesterday)) {
+                cursor = yesterday;
+            }
+
+            if (cursor != null) {
+                while (activeDates.contains(cursor)) {
+                    realCurrentStreak++;
+                    cursor = cursor.minusDays(1);
+                }
+            }
+
             StreakCalendarDto response = StreakCalendarDto.builder()
                     .userId(userId)
                     .year(year)
                     .month(month)
                     .totalNotesThisMonth(notes.size())
-                    .currentStreakDays(maxStreak)
+                    .currentStreakDays(realCurrentStreak)
                     .days(streakDays)
                     .build();
 
