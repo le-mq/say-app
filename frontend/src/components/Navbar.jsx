@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
+import { authStore, useAuthStore } from '../store/authStore';
 import { noteService } from '../services/noteService';
+import { authService } from '../services/authService';
 import { calculateCurrentStreak } from '../utils/streakUtils';
 import { toast } from 'react-toastify';
 import { 
@@ -16,7 +17,14 @@ export default function Navbar() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [liveStreak, setLiveStreak] = useState(user?.streakDays ?? 0);
   const userMenuRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof user?.streakDays === 'number') {
+      setLiveStreak(user.streakDays);
+    }
+  }, [user?.streakDays]);
 
   // Automatically calculate and synchronize the user's authentic daily streak
   useEffect(() => {
@@ -24,11 +32,34 @@ export default function Navbar() {
     let isMounted = true;
     const syncStreak = async () => {
       try {
-        const res = await noteService.getUserNotes(user.id);
-        const userNotes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
-        const computedStreak = calculateCurrentStreak(userNotes);
-        if (isMounted && user.streakDays !== computedStreak) {
-          setUser({ ...user, streakDays: computedStreak });
+        const now = new Date();
+        const [notesRes, calendarRes] = await Promise.allSettled([
+          noteService.getUserNotes(user.id),
+          authService.getStreakCalendar(user.id, now.getFullYear(), now.getMonth() + 1),
+        ]);
+
+        let computedStreak = null;
+
+        if (notesRes.status === 'fulfilled') {
+          const raw = notesRes.value;
+          const userNotes = Array.isArray(raw) ? raw : (raw?.data?.data || raw?.data || []);
+          computedStreak = calculateCurrentStreak(userNotes);
+        }
+
+        if ((computedStreak === null || computedStreak === 0) && calendarRes.status === 'fulfilled') {
+          const cal = calendarRes.value;
+          const calData = Array.isArray(cal) ? cal[0] : (cal?.data?.data || cal?.data || cal);
+          if (typeof calData?.currentStreakDays === 'number') {
+            computedStreak = calData.currentStreakDays;
+          }
+        }
+
+        if (isMounted && computedStreak !== null) {
+          setLiveStreak(computedStreak);
+          const latestUser = authStore.getState().user;
+          if (latestUser && latestUser.streakDays !== computedStreak) {
+            setUser({ ...latestUser, streakDays: computedStreak });
+          }
         }
       } catch (err) {
         console.warn('Navbar streak sync error:', err);
@@ -37,9 +68,13 @@ export default function Navbar() {
 
     syncStreak();
     window.addEventListener('say_note_created', syncStreak);
+    window.addEventListener('say_note_deleted', syncStreak);
+    window.addEventListener('focus', syncStreak);
     return () => {
       isMounted = false;
       window.removeEventListener('say_note_created', syncStreak);
+      window.removeEventListener('say_note_deleted', syncStreak);
+      window.removeEventListener('focus', syncStreak);
     };
   }, [user?.id, setUser]);
 
@@ -75,7 +110,7 @@ export default function Navbar() {
     ? user.displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'MQ';
 
-  const streakDisplay = user?.streakDays ?? 0;
+  const streakDisplay = liveStreak ?? user?.streakDays ?? 0;
 
   return (
     <header className="sticky top-0 z-40 bg-[#081724]/95 backdrop-blur-md border-b border-[#142c40]/80 transition-colors">

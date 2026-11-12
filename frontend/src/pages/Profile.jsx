@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuthStore } from '../store/authStore';
+import { authStore, useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
+import { buildPlayableTrack } from '../utils/snippetUtils';
 import { noteService } from '../services/noteService';
 import { authService } from '../services/authService';
 import { calculateCurrentStreak } from '../utils/streakUtils';
@@ -84,8 +85,9 @@ export default function Profile() {
           // Calculate true streak from all user notes
           const computedStreak = calculateCurrentStreak(userNotes);
           setStreakDays(computedStreak);
-          if (user?.streakDays !== computedStreak) {
-            setUser({ ...user, streakDays: computedStreak });
+          const latestUser = authStore.getState().user;
+          if (latestUser && latestUser.streakDays !== computedStreak) {
+            setUser({ ...latestUser, streakDays: computedStreak });
           }
 
           if (isMounted) {
@@ -116,7 +118,7 @@ export default function Profile() {
       isMounted = false;
       window.removeEventListener('say_note_created', handleNoteCreated);
     };
-  }, [user]);
+  }, [user?.id, setUser]);
 
   // Computed visibility filters
   const publicCount = useMemo(() => {
@@ -229,17 +231,8 @@ export default function Profile() {
       return;
     }
 
-    playTrack({
-      id: note.id,
-      songTitle: note.songTitle,
-      artistName: note.artistName,
-      externalSongUrl: note.externalSongUrl,
-      songImageUrl: note.songImageUrl,
-      audioSnippetStart: note.audioSnippetStart || 0,
-      audioSnippetEnd: (note.audioSnippetStart || 0) + 30,
-      templateType: note.templateType,
-      emotionTag: note.emotionTag,
-    });
+    const { track, options } = buildPlayableTrack(note);
+    playTrack(track, options);
   };
 
   const initials = user?.displayName
@@ -401,14 +394,13 @@ export default function Profile() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
             {filteredNotes.map((note) => (
               <MusicNoteCard
                 key={note.id}
                 note={note}
                 isPlaying={currentTrack?.id === note.id && isPlaying}
                 onPlayToggle={() => handlePlayToggle(note)}
-                compact={true}
               />
             ))}
           </div>

@@ -108,12 +108,23 @@ export default function LoginModal() {
                 const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
                 const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
                 const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
+                const backendUsername = authenticatedUser.username
+                  ? String(authenticatedUser.username).replace(/^@/, '').trim()
+                  : '';
+                const hasValidSavedHandle = savedHandle && savedHandle !== '@listener';
 
-                if (isSetupDone && savedHandle) {
+                if (backendUsername || (isSetupDone && hasValidSavedHandle)) {
+                  const resolvedUsername = backendUsername || savedHandle.replace(/^@/, '').trim();
+                  const resolvedHandle = `@${resolvedUsername}`;
+                  const resolvedDisplayName = backendUsername
+                    ? (authenticatedUser.displayName || savedDisplayName || 'Audiophile')
+                    : (savedDisplayName || authenticatedUser.displayName || 'Audiophile');
+
                   const safeUser = {
                     id: guaranteedId,
-                    displayName: savedDisplayName || authenticatedUser.displayName || 'Audiophile',
-                    handle: savedHandle,
+                    username: resolvedUsername,
+                    displayName: resolvedDisplayName,
+                    handle: resolvedHandle,
                     avatarUrl: authenticatedUser.avatarUrl || null,
                     audiophileRank: authenticatedUser.audiophileRank || "Novice Listener",
                     bio: authenticatedUser.bio || "Curating timeless records on SAY.",
@@ -121,6 +132,9 @@ export default function LoginModal() {
                     bestStreakDays: authenticatedUser.bestStreakDays ?? authenticatedUser.streakDays ?? 0,
                     notesCount: authenticatedUser.notesCount || 0,
                   };
+                  localStorage.setItem(`say_setup_done_${userKey}`, 'true');
+                  localStorage.setItem(`say_handle_${userKey}`, resolvedHandle);
+                  localStorage.setItem(`say_name_${userKey}`, resolvedDisplayName);
                   setUser(safeUser);
                   toast.success(`Welcome back, ${safeUser.displayName}!`);
                   handleClose();
@@ -161,7 +175,6 @@ export default function LoginModal() {
 
       let userResult = {
         displayName: "Audiophile",
-        handle: "@listener",
         ...payload,
       };
 
@@ -184,12 +197,20 @@ export default function LoginModal() {
       const isSetupDone = localStorage.getItem(`say_setup_done_${userKey}`);
       const savedHandle = localStorage.getItem(`say_handle_${userKey}`);
       const savedDisplayName = localStorage.getItem(`say_name_${userKey}`);
+      const backendUsername = userResult.username
+        ? String(userResult.username).replace(/^@/, '').trim()
+        : '';
+      const hasValidSavedHandle = savedHandle && savedHandle !== '@listener';
 
-      if (isSetupDone && savedHandle) {
+      if (backendUsername || (isSetupDone && hasValidSavedHandle)) {
+        const resolvedUsername = backendUsername || savedHandle.replace(/^@/, '').trim();
         const safeUser = {
           ...userResult,
-          displayName: savedDisplayName || userResult.displayName || "Audiophile",
-          handle: savedHandle,
+          username: resolvedUsername,
+          displayName: backendUsername
+            ? (userResult.displayName || savedDisplayName || "Audiophile")
+            : (savedDisplayName || userResult.displayName || "Audiophile"),
+          handle: `@${resolvedUsername}`,
         };
         setUser(safeUser);
         toast.success(`Welcome back, ${safeUser.displayName}!`);
@@ -200,7 +221,7 @@ export default function LoginModal() {
 
       setTempUser(userResult);
       setCustomDisplayName(userResult.displayName || "Audiophile");
-      setCustomUsername(userResult.username || "audiophile");
+      setCustomUsername(backendUsername || "");
       setShowProfileModal(true);
     } catch (err) {
       console.warn("Sign in session notice:", err);
@@ -210,13 +231,16 @@ export default function LoginModal() {
     }
   };
 
-  // Save customized display name (with keyboard icons) + unique username (allowing uppercase)
+  // Save customized display name (with keyboard icons) + unique username
   const handleSaveProfile = async (e) => {
     e.preventDefault();
     const finalDisplayName = customDisplayName.trim() || tempUser.displayName || 'Audiophile';
-    // Preserve uppercase letters in username, strictly no emojis or invalid chars
-    const cleanUsername = customUsername.trim().replace(/[^a-zA-Z0-9_.]/g, '') || 'listener';
-    const formattedHandle = cleanUsername.startsWith('@') ? cleanUsername : `@${cleanUsername}`;
+    const cleanUsername = customUsername.trim().replace(/^@/, '').replace(/[^a-zA-Z0-9_.]/g, '').toLowerCase();
+    if (cleanUsername.length < 3 || cleanUsername.length > 30) {
+      toast.error('Username must be 3-30 characters (letters, numbers, dots, or underscores).');
+      return;
+    }
+    const formattedHandle = `@${cleanUsername}`;
     const userId = (tempUser.id && tempUser.id.length === 36 && tempUser.id.includes('-') && !String(tempUser.id).startsWith('a0000000-'))
       ? tempUser.id
       : (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'u-' + Date.now());
@@ -230,10 +254,11 @@ export default function LoginModal() {
     } catch {}
 
     // Public presentation profile ONLY - strictly NO sensitive data (no email, no password, no auth token)
-    const safeUser = {
+    let safeUser = {
       id: userId,
-      displayName: finalDisplayName, // Rich nickname with emojis & accents (Locket style)
-      handle: formattedHandle, // Unique @username with preserved casing
+      username: cleanUsername,
+      displayName: finalDisplayName,
+      handle: formattedHandle,
       avatarUrl: tempUser.avatarUrl || null,
       audiophileRank: tempUser.audiophileRank || "Novice Listener",
       bio: tempUser.bio || "Curating timeless records on SAY.",
@@ -242,25 +267,36 @@ export default function LoginModal() {
       notesCount: tempUser.notesCount || 0,
     };
 
-    // Mark one-time setup as completed permanently for this user
-    const userKey = tempUser.email || userId;
-    localStorage.setItem(`say_setup_done_${userKey}`, 'true');
-    localStorage.setItem(`say_handle_${userKey}`, formattedHandle);
-    localStorage.setItem(`say_name_${userKey}`, finalDisplayName);
-
     try {
       if (tempUser.id && String(tempUser.id).length > 20) {
-        await authService.updateProfile(tempUser.id, {
+        const updatedRes = await authService.updateProfile(tempUser.id, {
+          username: cleanUsername,
           displayName: finalDisplayName,
           bio: safeUser.bio,
         });
+        const updatedUser = updatedRes?.data?.data || updatedRes?.data || updatedRes;
+        if (updatedUser && updatedUser.id) {
+          safeUser = {
+            ...safeUser,
+            username: updatedUser.username || cleanUsername,
+            displayName: updatedUser.displayName || finalDisplayName,
+            handle: `@${updatedUser.username || cleanUsername}`,
+          };
+        }
       }
     } catch (err) {
-      // Local fallback
+      toast.error(err?.response?.data?.message || 'Unable to save username. Please try another.');
+      return;
     }
 
+    // Mark one-time setup as completed permanently for this user
+    const userKey = tempUser.email || userId;
+    localStorage.setItem(`say_setup_done_${userKey}`, 'true');
+    localStorage.setItem(`say_handle_${userKey}`, safeUser.handle);
+    localStorage.setItem(`say_name_${userKey}`, safeUser.displayName);
+
     setUser(safeUser);
-    toast.success(`Welcome to SAY, ${finalDisplayName}!`);
+    toast.success(`Welcome to SAY, ${safeUser.displayName}!`);
     handleClose();
     navigate('/feed');
   };

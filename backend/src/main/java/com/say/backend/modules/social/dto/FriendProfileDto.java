@@ -14,6 +14,7 @@ import java.util.UUID;
 public class FriendProfileDto {
     private UUID friendshipId;
     private UUID friendId;
+    private String username;
     private String displayName;
     private String avatarUrl;
     private String audiophileRank;

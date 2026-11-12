@@ -137,6 +137,7 @@ public class FriendshipService implements IFriendshipService {
                         return FriendProfileDto.builder()
                                 .friendshipId(f.getId())
                                 .friendId(friend.getId())
+                                .username(friend.getUsername())
                                 .displayName(friend.getDisplayName())
                                 .avatarUrl(friend.getAvatarUrl())
                                 .audiophileRank(friend.getAudiophileRank())
@@ -163,7 +164,7 @@ public class FriendshipService implements IFriendshipService {
                 throw new ResourceNotFoundException("User not found with id: " + userId);
             }
 
-            List<Friendship> requests = friendshipRepository.findByAddresseeIdAndStatus(userId, "PENDING");
+            List<Friendship> requests = friendshipRepository.findAllPendingRequestsForUser(userId);
             List<FriendResponse> dtos = requests.stream().map(this::mapToResponseDto).toList();
             return CompletableFuture.completedFuture(dtos);
         } catch (AppException e) {
@@ -204,11 +205,15 @@ public class FriendshipService implements IFriendshipService {
         return FriendResponse.builder()
                 .id(friendship.getId())
                 .requesterId(friendship.getRequester().getId())
+                .requesterUsername(friendship.getRequester().getUsername())
                 .requesterDisplayName(friendship.getRequester().getDisplayName())
                 .requesterAvatarUrl(friendship.getRequester().getAvatarUrl())
+                .requesterAudiophileRank(friendship.getRequester().getAudiophileRank())
                 .addresseeId(friendship.getAddressee().getId())
+                .addresseeUsername(friendship.getAddressee().getUsername())
                 .addresseeDisplayName(friendship.getAddressee().getDisplayName())
                 .addresseeAvatarUrl(friendship.getAddressee().getAvatarUrl())
+                .addresseeAudiophileRank(friendship.getAddressee().getAudiophileRank())
                 .status(friendship.getStatus())
                 .createdAt(friendship.getCreatedAt())
                 .updatedAt(friendship.getUpdatedAt())

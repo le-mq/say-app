@@ -9,6 +9,7 @@ import MemoryShuffle from '../universe/MemoryShuffle';
 import StardustCapsules from '../universe/StardustCapsules';
 import StreakCalendar from '../universe/StreakCalendar';
 import { formatTimeDetails } from '../utils/timeFormat';
+import { buildPlayableTrack } from '../utils/snippetUtils';
 import {
   Sparkles, Clock, Compass, Disc, Play, Pause, Plus, X,
   ExternalLink, Calendar, Music, Lock, Heart, Share2, Layers
@@ -90,17 +91,8 @@ export default function MyUniverse() {
       return;
     }
 
-    playTrack({
-      id: note.id,
-      songTitle: note.songTitle,
-      artistName: note.artistName,
-      externalSongUrl: note.externalSongUrl,
-      songImageUrl: note.songImageUrl,
-      audioSnippetStart: note.audioSnippetStart || 0,
-      audioSnippetEnd: (note.audioSnippetStart || 0) + 30,
-      templateType: note.templateType,
-      emotionTag: note.emotionTag,
-    });
+    const { track, options } = buildPlayableTrack(note);
+    playTrack(track, options);
   };
 
   return (

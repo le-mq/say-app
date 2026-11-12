@@ -104,10 +104,12 @@ public class AuthService implements IAuthService {
 
             User user = userRepository.findByEmail(request.getEmail())
                     .map(existingUser -> {
-                        if (request.getAvatarUrl() != null) {
+                        if ((existingUser.getAvatarUrl() == null || existingUser.getAvatarUrl().isBlank())
+                                && request.getAvatarUrl() != null) {
                             existingUser.setAvatarUrl(request.getAvatarUrl());
                         }
-                        if (request.getDisplayName() != null) {
+                        if ((existingUser.getDisplayName() == null || existingUser.getDisplayName().isBlank())
+                                && request.getDisplayName() != null) {
                             existingUser.setDisplayName(request.getDisplayName());
                         }
                         return userRepository.save(existingUser);

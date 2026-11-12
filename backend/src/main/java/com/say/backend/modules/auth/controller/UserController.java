@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -40,6 +41,15 @@ public class UserController {
     ) {
         return userService.getUserByEmail(email)
                 .thenApply(response -> ResponseEntity.ok(ApiResponse.success(response)));
+    }
+
+    @GetMapping("/search")
+    public CompletableFuture<ResponseEntity<ApiResponse<List<UserProfileResponse>>>> searchUsers(
+            @RequestParam String query,
+            @RequestParam(required = false) UUID excludeUserId
+    ) {
+        return userService.searchUsers(query, excludeUserId)
+                .thenApply(response -> ResponseEntity.ok(ApiResponse.success("Users searched successfully", response)));
     }
 
     @DeleteMapping("/{userId}")
