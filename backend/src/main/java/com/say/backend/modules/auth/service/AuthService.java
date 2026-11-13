@@ -262,6 +262,7 @@ public class AuthService implements IAuthService {
                 .avatarUrl(user.getAvatarUrl())
                 .bio(user.getBio())
                 .audiophileRank(user.getAudiophileRank())
+                .role(user.getRole() != null ? user.getRole() : "USER")
                 .streakDays(streak)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())

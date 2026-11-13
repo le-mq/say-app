@@ -10,9 +10,21 @@ CREATE TABLE IF NOT EXISTS users (
     avatar_url TEXT,
     bio TEXT,
     audiophile_rank VARCHAR(50) DEFAULT 'Novice Listener',
+    role VARCHAR(20) NOT NULL DEFAULT 'USER',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Ensure role column exists if table was created in an earlier migration
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = 'role'
+    ) THEN
+        ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'USER';
+    END IF;
+END $$;
 
 -- Table: friendships
 CREATE TABLE IF NOT EXISTS friendships (
@@ -65,7 +77,30 @@ CREATE TABLE IF NOT EXISTS note_replies (
 CREATE INDEX IF NOT EXISTS idx_note_replies_parent_note_id 
     ON note_replies (parent_note_id);
 
--- Ensure sticker_badge column is TEXT in existing database
+-- Table: app_configs (Dynamic configuration & Feature Flags)
+CREATE TABLE IF NOT EXISTS app_configs (
+    config_key VARCHAR(50) PRIMARY KEY,
+    config_value TEXT NOT NULL,
+    description TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: notifications (In-app real-time alerts)
+CREATE TABLE IF NOT EXISTS notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    type VARCHAR(50) NOT NULL,
+    message TEXT NOT NULL,
+    reference_id UUID,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_recipient_read 
+    ON notifications (recipient_id, is_read, created_at DESC);
+
+-- Backward compatibility patches
 ALTER TABLE notes ALTER COLUMN sticker_badge TYPE TEXT;
 ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_template_type_check;
 ALTER TABLE notes ADD CONSTRAINT notes_template_type_check CHECK (template_type IN ('RECEIPTIFY', 'CASSETTE', 'STAMP', 'VINYL', 'GALAXY'));

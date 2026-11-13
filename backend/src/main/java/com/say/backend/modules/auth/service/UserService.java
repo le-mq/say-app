@@ -221,6 +221,7 @@ public class UserService implements IUserService {
                 .avatarUrl(user.getAvatarUrl())
                 .bio(user.getBio())
                 .audiophileRank(user.getAudiophileRank())
+                .role(user.getRole() != null ? user.getRole() : "USER")
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

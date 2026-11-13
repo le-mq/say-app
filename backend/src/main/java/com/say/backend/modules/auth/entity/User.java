@@ -38,6 +38,10 @@ public class User {
     @Column(name = "audiophile_rank", length = 50)
     private String audiophileRank = "Novice Listener";
 
+    @Builder.Default
+    @Column(nullable = false, length = 20)
+    private String role = "USER";
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 

@@ -20,6 +20,7 @@ public class UserProfileDto {
     private String avatarUrl;
     private String bio;
     private String audiophileRank;
+    private String role;
     private Integer streakDays;
     private Instant createdAt;
     private Instant updatedAt;

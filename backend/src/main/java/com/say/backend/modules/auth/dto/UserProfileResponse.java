@@ -20,6 +20,7 @@ public class UserProfileResponse {
     private String avatarUrl;
     private String bio;
     private String audiophileRank;
+    private String role;
     private Instant createdAt;
     private Instant updatedAt;
 }

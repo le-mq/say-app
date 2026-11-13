@@ -5,6 +5,7 @@ import com.say.backend.common.exception.BadRequestException;
 import com.say.backend.common.exception.ResourceNotFoundException;
 import com.say.backend.modules.auth.entity.User;
 import com.say.backend.modules.auth.repository.IUserRepository;
+import com.say.backend.modules.notification.service.INotificationService;
 import com.say.backend.modules.social.dto.FriendProfileDto;
 import com.say.backend.modules.social.dto.FriendResponse;
 import com.say.backend.modules.social.entity.Friendship;
@@ -27,6 +28,7 @@ public class FriendshipService implements IFriendshipService {
 
     private final IFriendshipRepository friendshipRepository;
     private final IUserRepository userRepository;
+    private final INotificationService notificationService;
 
     @Override
     @Async("taskExecutor")
@@ -66,6 +68,20 @@ public class FriendshipService implements IFriendshipService {
                     .build();
 
             Friendship saved = friendshipRepository.save(friendship);
+            
+            // Notify addressee that someone sent a friendship invitation
+            try {
+                notificationService.sendNotification(
+                        addresseeId,
+                        requesterId,
+                        "FRIEND_REQUEST",
+                        requester.getDisplayName() + " sent you a friendship invitation.",
+                        saved.getId()
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend request notification: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
@@ -89,6 +105,20 @@ public class FriendshipService implements IFriendshipService {
 
             friendship.setStatus("ACCEPTED");
             Friendship saved = friendshipRepository.save(friendship);
+            
+            // Notify requester that invitation was accepted
+            try {
+                notificationService.sendNotification(
+                        friendship.getRequester().getId(),
+                        currentUserId,
+                        "FRIEND_ACCEPTED",
+                        friendship.getAddressee().getDisplayName() + " accepted your friendship invitation.",
+                        saved.getId()
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend accepted notification: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
