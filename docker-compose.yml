@@ -13,8 +13,9 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Tự động chạy schema.sql khi container khởi tạo lần đầu
-      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      # Tự động chạy schema.sql và data.sql khi container khởi tạo lần đầu
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./backend/src/main/resources/data.sql:/docker-entrypoint-initdb.d/02_data.sql
 
 volumes:
   postgres_data:

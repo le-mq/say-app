@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
+import { buildPlayableTrack } from '../utils/snippetUtils';
 import { noteService } from '../services/noteService';
 import { socialService } from '../services/socialService';
 import MusicNoteCard from '../components/MusicNoteCard';
@@ -9,7 +10,7 @@ import ReplyWithSongModal from '../components/ReplyWithSongModal';
 import { 
   Users, Radio, UserCheck, Plus, Search, Check, X, 
   Disc, Play, Pause, Heart, Bookmark, MessageSquare, ExternalLink, 
-  UserPlus, UserMinus, Sparkles, AlertCircle
+  UserPlus, UserMinus, Sparkles, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { formatTimeDetails } from '../utils/timeFormat';
@@ -34,8 +35,11 @@ export default function Friends() {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [sentRequestUserIds, setSentRequestUserIds] = useState(new Set());
+  const [isPendingExpanded, setIsPendingExpanded] = useState(true);
+  const [isFriendsExpanded, setIsFriendsExpanded] = useState(true);
 
   // Reply With Song modal state
   const [replyModalNote, setReplyModalNote] = useState(null);
@@ -61,10 +65,10 @@ export default function Friends() {
           ? (Array.isArray(userNotesRes.value) ? userNotesRes.value : (userNotesRes.value?.data?.data || userNotesRes.value?.data || []))
           : [];
 
-        // Ensure user's own notes (especially Friends-only) are included in their Friends feed
+        // Ensure user's own Friends-only notes are included in their Friends feed
         const myNotes = rawUserNotes.filter((n) => {
           const vis = (n.visibility || 'PUBLIC').toUpperCase();
-          return vis === 'FRIENDS' || vis === 'FRIENDS_ONLY' || vis === 'PUBLIC';
+          return vis === 'FRIENDS' || vis === 'FRIENDS_ONLY';
         });
 
         const mergedMap = new Map();
@@ -134,59 +138,64 @@ export default function Friends() {
   }, [user]);
 
   // Search users in Friendship Hub
-  const handleSearchUsers = (e) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const executeSearch = async (queryText) => {
+    const trimmed = queryText.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setHasSearched(false);
+      return;
+    }
 
     setIsSearching(true);
-    setTimeout(() => {
-      // Clean mock discovery search
-      const q = searchQuery.toLowerCase().replace(/^@/, '');
-      const candidates = [
-        {
-          id: 'cand-1',
-          displayName: 'Sora Tanaka',
-          handle: '@soratanaka',
-          avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-          audiophileRank: 'Hi-Fi Master',
-          bio: 'Shibuya vinyl explorer & jazz kissa enthusiast.'
-        },
-        {
-          id: 'cand-2',
-          displayName: 'Clara Oswald',
-          handle: '@clara_sounds',
-          avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
-          audiophileRank: 'Tape Specialist',
-          bio: 'Listening to rain and cassette recordings in London.'
-        },
-        {
-          id: 'cand-3',
-          displayName: 'David K.',
-          handle: '@davidk_audio',
-          avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200',
-          audiophileRank: 'Novice Listener',
-          bio: 'Discovering indie folk and dream pop.'
-        }
-      ];
-
-      const matches = candidates.filter(
-        c => c.displayName.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q)
-      );
-      setSearchResults(matches.length > 0 ? matches : candidates);
+    setHasSearched(true);
+    try {
+      const res = await socialService.searchUsers(trimmed, user?.id);
+      const users = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      setSearchResults(users);
+    } catch (err) {
+      console.error('Failed to search users:', err);
+      toast.error(err?.response?.data?.message || 'Failed to search users');
+      setSearchResults([]);
+    } finally {
       setIsSearching(false);
-    }, 250);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab !== 'hub') return;
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+    const timer = setTimeout(() => {
+      executeSearch(trimmed);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeSubTab, user?.id]);
+
+  const handleSearchUsers = async (e) => {
+    e.preventDefault();
+    await executeSearch(searchQuery);
   };
 
   const handleSendRequest = async (targetUser) => {
     try {
-      if (user?.id) {
-        await socialService.sendFriendRequest(user.id, targetUser.id);
+      if (!user?.id) {
+        toast.error('Please sign in to send friend requests');
+        return;
       }
+      await socialService.sendFriendRequest(user.id, targetUser.id);
       setSentRequestUserIds(prev => new Set(prev).add(targetUser.id));
       toast.success(`Friend request sent to ${targetUser.displayName}`);
+      loadFriendshipHub();
     } catch (err) {
-      setSentRequestUserIds(prev => new Set(prev).add(targetUser.id));
-      toast.success(`Friend request sent to ${targetUser.displayName}`);
+      console.error('Failed to send friend request:', err);
+      const errMsg = err?.message || err?.response?.data?.message || 'Could not send friend request';
+      if (errMsg.toLowerCase().includes('already pending')) {
+        setSentRequestUserIds(prev => new Set(prev).add(targetUser.id));
+        toast.info(errMsg);
+        loadFriendshipHub();
+      } else {
+        toast.error(errMsg);
+      }
     }
   };
 
@@ -218,6 +227,25 @@ export default function Friends() {
     }
   };
 
+  const handleCancelRequest = async (reqId, addresseeId) => {
+    try {
+      if (user?.id) {
+        await socialService.removeFriend(reqId, user.id);
+      }
+      setPendingRequests(prev => prev.filter(r => r.id !== reqId));
+      if (addresseeId) {
+        setSentRequestUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(addresseeId);
+          return next;
+        });
+      }
+      toast.info('Friend request cancelled.');
+    } catch (err) {
+      toast.error(err?.message || 'Could not cancel friend request.');
+    }
+  };
+
   const handleRemoveFriend = async (friend, name) => {
     const friendId = friend.friendId || friend.id;
     const friendshipId = friend.friendshipId || friend.id;
@@ -242,17 +270,8 @@ export default function Friends() {
       return;
     }
 
-    playTrack({
-      id: note.id,
-      songTitle: note.songTitle,
-      artistName: note.artistName,
-      externalSongUrl: note.externalSongUrl,
-      songImageUrl: note.songImageUrl,
-      audioSnippetStart: note.audioSnippetStart || 0,
-      audioSnippetEnd: (note.audioSnippetStart || 0) + 30,
-      templateType: note.templateType,
-      emotionTag: note.emotionTag,
-    });
+    const { track, options } = buildPlayableTrack(note);
+    playTrack(track, options);
   };
 
   // Like note toggle with actual count tracking
@@ -301,6 +320,34 @@ export default function Friends() {
       {/* SUB-TAB CONTENT */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
+        {/* Mobile / Responsive Sub-tab Switcher (shown when screen < lg) */}
+        <div className="lg:hidden flex items-center gap-1.5 mb-6 bg-[#091e30] p-1 rounded-2xl border border-[#163a56] w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('feed')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeSubTab === 'feed'
+                ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>Friends Feed</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('hub')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeSubTab === 'hub'
+                ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Friendship Hub</span>
+          </button>
+        </div>
+
         {/* SUB-TAB A: FRIENDS FEED (Chapter 5.3) */}
         {activeSubTab === 'feed' && (
           <div className="space-y-6">
@@ -316,7 +363,7 @@ export default function Friends() {
                 </span>
               </div>
               <p className="text-[11px] text-[#91B9C5]/60 font-mono hidden sm:block">
-                Public & Friends-only notes from your circle
+                Notes shared within your friends circle
               </p>
             </div>
 
@@ -341,14 +388,13 @@ export default function Friends() {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
                 {friendsNotes.map((note) => (
                   <MusicNoteCard
                     key={note.id}
                     note={note}
                     isPlaying={currentTrack?.id === note.id && isPlaying}
                     onPlayToggle={() => handlePlayToggle(note)}
-                    compact={true}
                   />
                 ))}
               </div>
@@ -375,8 +421,15 @@ export default function Friends() {
                   <input
                     type="text"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search username / name..."
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSearchQuery(val);
+                      if (!val.trim()) {
+                        setSearchResults([]);
+                        setHasSearched(false);
+                      }
+                    }}
+                    placeholder="Search @username or name..."
                     className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#061421] border border-[#183d5f] text-xs text-[#E8EEF0] focus:border-cyan-400 focus:outline-none placeholder-[#91B9C5]/40 font-mono"
                   />
                 </div>
@@ -390,14 +443,37 @@ export default function Friends() {
               </form>
 
               {/* Search Results */}
+              {hasSearched && !isSearching && searchResults.length === 0 && (
+                <div className="pt-3 border-t border-[#122e47] text-center py-3">
+                  <p className="text-xs font-mono text-[#91B9C5]/70">
+                    No users found matching "{searchQuery.trim()}".
+                  </p>
+                </div>
+              )}
+
               {searchResults.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-[#122e47]">
                   <span className="text-[10px] font-mono text-[#91B9C5]/70 block">
                     Discovery Results ({searchResults.length})
                   </span>
+                  <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                   {searchResults.map((person) => {
-                    const isAlreadyFriend = friendsList.some(f => f.id === person.id);
-                    const hasSent = sentRequestUserIds.has(person.id);
+                    const isAlreadyFriend = friendsList.some(f => (f.friendId || f.id) === person.id);
+                    const hasSent = sentRequestUserIds.has(person.id) || pendingRequests.some(
+                      r => r.requesterId === user?.id && r.addresseeId === person.id
+                    );
+                    const incomingPending = pendingRequests.find(
+                      r => r.requesterId === person.id && r.addresseeId === user?.id
+                    );
+                    const handleText = person.username
+                      ? `@${person.username}`
+                      : (person.handle || person.email || 'Listener');
+                    const initials = (person.displayName || 'U')
+                      .split(' ')
+                      .map((part) => part[0])
+                      .join('')
+                      .slice(0, 2)
+                      .toUpperCase();
 
                     return (
                       <div
@@ -405,17 +481,23 @@ export default function Friends() {
                         className="p-3 rounded-2xl bg-[#071827] border border-[#153654] flex items-center justify-between gap-3"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <img
-                            src={person.avatarUrl}
-                            alt={person.displayName}
-                            className="w-9 h-9 rounded-xl object-cover border border-[#204d73] shrink-0"
-                          />
+                          {person.avatarUrl ? (
+                            <img
+                              src={person.avatarUrl}
+                              alt={person.displayName}
+                              className="w-9 h-9 rounded-xl object-cover border border-[#204d73] shrink-0"
+                            />
+                          ) : (
+                            <div className="w-9 h-9 rounded-xl bg-[#0d2840] border border-[#204d73] flex items-center justify-center text-xs font-bold text-cyan-300 shrink-0">
+                              {initials}
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
                               {person.displayName}
                             </h5>
                             <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
-                              {person.handle} · {person.audiophileRank}
+                              {handleText} · {person.audiophileRank || 'Novice Listener'}
                             </p>
                           </div>
                         </div>
@@ -424,6 +506,15 @@ export default function Friends() {
                           <span className="px-3 py-1.5 rounded-xl bg-[#0c2438] text-cyan-300 border border-cyan-500/30 text-[10px] font-bold font-mono">
                             Connected
                           </span>
+                        ) : incomingPending ? (
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptRequest(incomingPending.id, person.displayName)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-[#07131e] text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>Accept</span>
+                          </button>
                         ) : hasSent ? (
                           <span className="px-3 py-1.5 rounded-xl bg-[#12293d] text-[#91B9C5]/80 text-[10px] font-bold font-mono">
                             Pending
@@ -441,147 +532,236 @@ export default function Friends() {
                       </div>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>
 
             {/* 2. PENDING REQUESTS (Chapter 5.4 Wireframe) */}
             <div className="rounded-3xl bg-[#091d30]/70 border border-[#143552] p-5 space-y-4">
-              <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setIsPendingExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-between cursor-pointer text-left"
+              >
                 <div className="flex items-center gap-2">
                   <UserPlus className="w-4 h-4 text-amber-300" />
                   <h3 className="text-xs font-mono font-bold text-[#E8EEF0] uppercase tracking-wider">
                     Pending Requests
                   </h3>
                 </div>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#0e273d] text-amber-300 border border-amber-500/30">
-                  {pendingRequests.length}
-                </span>
-              </div>
-
-              {pendingRequests.length === 0 ? (
-                <p className="text-xs text-[#91B9C5]/60 font-mono py-2 text-center">
-                  No pending friendship invitations.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {pendingRequests.map((req) => {
-                    const reqUser = req.requester || {
-                      displayName: 'Julian Vance',
-                      handle: '@julianv',
-                      avatarUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100',
-                      audiophileRank: 'Vinyl Archivist',
-                    };
-
-                    return (
-                      <div
-                        key={req.id}
-                        className="p-3.5 rounded-2xl bg-[#061421] border border-[#193d5f] flex items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <img
-                            src={reqUser.avatarUrl}
-                            alt={reqUser.displayName}
-                            className="w-10 h-10 rounded-xl object-cover border border-[#204d73] shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
-                              {reqUser.displayName}
-                            </h5>
-                            <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
-                              {reqUser.handle} · {reqUser.audiophileRank}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleAcceptRequest(req.id, reqUser.displayName)}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-[#07131e] text-xs font-bold transition-colors cursor-pointer"
-                          >
-                            <Check className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>Accept</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectRequest(req.id)}
-                            className="p-1.5 rounded-xl hover:bg-[#142e47] text-[#91B9C5] hover:text-rose-300 transition-colors cursor-pointer"
-                            title="Decline"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#0e273d] text-amber-300 border border-amber-500/30">
+                    {pendingRequests.length}
+                  </span>
+                  {isPendingExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-[#91B9C5]" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-[#91B9C5]" />
+                  )}
                 </div>
+              </button>
+
+              {isPendingExpanded && (
+                pendingRequests.length === 0 ? (
+                  <p className="text-xs text-[#91B9C5]/60 font-mono py-2 text-center">
+                    No pending friendship invitations.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+                    {pendingRequests.map((req) => {
+                      const isOutgoing = req.requesterId === user?.id;
+                      const peerDisplayName = isOutgoing
+                        ? (req.addresseeDisplayName || 'Audiophile')
+                        : (req.requesterDisplayName || req.requester?.displayName || 'Audiophile');
+                      const peerUsername = isOutgoing
+                        ? req.addresseeUsername
+                        : (req.requesterUsername || req.requester?.username);
+                      const peerHandle = peerUsername ? `@${peerUsername}` : (req.requester?.handle || 'Listener');
+                      const peerAvatar = isOutgoing
+                        ? req.addresseeAvatarUrl
+                        : (req.requesterAvatarUrl || req.requester?.avatarUrl);
+                      const peerRank = isOutgoing
+                        ? (req.addresseeAudiophileRank || 'Novice Listener')
+                        : (req.requesterAudiophileRank || req.requester?.audiophileRank || 'Novice Listener');
+                      const peerInitials = peerDisplayName
+                        .split(' ')
+                        .map((part) => part[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase();
+
+                      return (
+                        <div
+                          key={req.id}
+                          className="p-3.5 rounded-2xl bg-[#061421] border border-[#193d5f] flex items-center justify-between gap-3"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {peerAvatar ? (
+                              <img
+                                src={peerAvatar}
+                                alt={peerDisplayName}
+                                className="w-10 h-10 rounded-xl object-cover border border-[#204d73] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-[#0d2840] border border-[#204d73] flex items-center justify-center text-xs font-bold text-cyan-300 shrink-0">
+                                {peerInitials}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
+                                  {peerDisplayName}
+                                </h5>
+                                {isOutgoing && (
+                                  <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-[#102940] text-amber-300 border border-amber-500/30 shrink-0">
+                                    Sent
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
+                                {peerHandle} · {peerRank}
+                              </p>
+                            </div>
+                          </div>
+
+                          {isOutgoing ? (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="px-2.5 py-1 rounded-xl bg-[#12293d] text-[#91B9C5]/80 text-[10px] font-bold font-mono">
+                                Pending
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCancelRequest(req.id, req.addresseeId)}
+                                className="p-1.5 rounded-xl hover:bg-[#142e47] text-[#91B9C5] hover:text-rose-300 transition-colors cursor-pointer"
+                                title="Cancel Request"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleAcceptRequest(req.id, peerDisplayName)}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-[#07131e] text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>Accept</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectRequest(req.id)}
+                                className="p-1.5 rounded-xl hover:bg-[#142e47] text-[#91B9C5] hover:text-rose-300 transition-colors cursor-pointer"
+                                title="Decline"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
 
             {/* 3. MY FRIENDS (Chapter 5.4 Wireframe) */}
             <div className="rounded-3xl bg-[#091d30]/70 border border-[#143552] p-5 space-y-4">
-              <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setIsFriendsExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-between cursor-pointer text-left"
+              >
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-cyan-300" />
                   <h3 className="text-xs font-mono font-bold text-[#E8EEF0] uppercase tracking-wider">
                     My Friends
                   </h3>
                 </div>
-                <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#0e273d] text-cyan-300 border border-[#1b4366]">
-                  {friendsList.length} Friends
-                </span>
-              </div>
-
-              {friendsList.length === 0 ? (
-                <p className="text-xs text-[#91B9C5]/60 font-mono py-2 text-center">
-                  You haven't added any friends yet.
-                </p>
-              ) : (
-                <div className="space-y-2.5">
-                  {friendsList.map((friend) => (
-                    <div
-                      key={friend.id}
-                      className="p-3.5 rounded-2xl bg-[#061421] border border-[#153654] flex items-center justify-between gap-3 hover:border-[#1d4870] transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={friend.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                          alt={friend.displayName}
-                          className="w-10 h-10 rounded-xl object-cover border border-[#204d73] shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
-                            {friend.displayName}
-                          </h5>
-                          <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
-                            {friend.handle || '@friend'} · {friend.audiophileRank || 'Audiophile'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* Chapter 5.4: [VIEW PROFILE] button */}
-                        <button
-                          type="button"
-                          onClick={() => setViewingProfileFriend(friend)}
-                          className="px-3 py-1.5 rounded-xl bg-[#0e273d] hover:bg-[#143552] text-[#91B9C5] hover:text-white border border-[#1b4366] text-xs font-medium transition-colors cursor-pointer"
-                        >
-                          View Profile
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFriend(friend, friend.displayName)}
-                          className="p-1.5 rounded-xl hover:bg-rose-950/40 text-[#91B9C5]/50 hover:text-rose-400 transition-colors cursor-pointer"
-                          title="Unfriend"
-                        >
-                          <UserMinus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#0e273d] text-cyan-300 border border-[#1b4366]">
+                    {friendsList.length} Friends
+                  </span>
+                  {isFriendsExpanded ? (
+                    <ChevronUp className="w-4 h-4 text-[#91B9C5]" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-[#91B9C5]" />
+                  )}
                 </div>
+              </button>
+
+              {isFriendsExpanded && (
+                friendsList.length === 0 ? (
+                  <p className="text-xs text-[#91B9C5]/60 font-mono py-2 text-center">
+                    You haven't added any friends yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                    {friendsList.map((friend) => {
+                      const friendKey = friend.friendId || friend.friendshipId || friend.id;
+                      const friendHandle = friend.username
+                        ? `@${friend.username}`
+                        : (friend.handle || 'Listener');
+                      const friendInitials = (friend.displayName || 'F')
+                        .split(' ')
+                        .map((part) => part[0])
+                        .join('')
+                        .slice(0, 2)
+                        .toUpperCase();
+
+                      return (
+                        <div
+                          key={friendKey}
+                          className="p-3.5 rounded-2xl bg-[#061421] border border-[#153654] flex items-center justify-between gap-3 hover:border-[#1d4870] transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {friend.avatarUrl ? (
+                              <img
+                                src={friend.avatarUrl}
+                                alt={friend.displayName}
+                                className="w-10 h-10 rounded-xl object-cover border border-[#204d73] shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-xl bg-[#0d2840] border border-[#204d73] flex items-center justify-center text-xs font-bold text-cyan-300 shrink-0">
+                                {friendInitials}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
+                                {friend.displayName}
+                              </h5>
+                              <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
+                                {friendHandle} · {friend.audiophileRank || 'Novice Listener'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Chapter 5.4: [VIEW PROFILE] button */}
+                            <button
+                              type="button"
+                              onClick={() => setViewingProfileFriend(friend)}
+                              className="px-3 py-1.5 rounded-xl bg-[#0e273d] hover:bg-[#143552] text-[#91B9C5] hover:text-white border border-[#1b4366] text-xs font-medium transition-colors cursor-pointer"
+                            >
+                              View Profile
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFriend(friend, friend.displayName)}
+                              className="p-1.5 rounded-xl hover:bg-rose-950/40 text-[#91B9C5]/50 hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Unfriend"
+                            >
+                              <UserMinus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </div>
 
@@ -610,18 +790,29 @@ export default function Friends() {
               <X className="w-4 h-4" />
             </button>
 
-            <img
-              src={viewingProfileFriend.avatarUrl}
-              alt={viewingProfileFriend.displayName}
-              className="w-20 h-20 rounded-3xl object-cover border-2 border-[#204d73] mx-auto shadow-lg"
-            />
+            {viewingProfileFriend.avatarUrl ? (
+              <img
+                src={viewingProfileFriend.avatarUrl}
+                alt={viewingProfileFriend.displayName}
+                className="w-20 h-20 rounded-3xl object-cover border-2 border-[#204d73] mx-auto shadow-lg"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-3xl bg-[#0d2840] border-2 border-[#204d73] mx-auto shadow-lg flex items-center justify-center text-xl font-bold text-cyan-300">
+                {(viewingProfileFriend.displayName || 'F')
+                  .split(' ')
+                  .map((part) => part[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </div>
+            )}
 
             <div>
               <h4 className="text-base font-serif font-bold text-[#E8EEF0]">
                 {viewingProfileFriend.displayName}
               </h4>
               <p className="text-xs font-mono text-cyan-300">
-                {viewingProfileFriend.handle}
+                {viewingProfileFriend.username ? `@${viewingProfileFriend.username}` : (viewingProfileFriend.handle || 'Listener')}
               </p>
             </div>
 
