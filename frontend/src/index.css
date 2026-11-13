@@ -197,6 +197,21 @@ body {
 
 .animate-spin-slow {
   animation: spinSlow 12s linear infinite;
+  will-change: transform;
+}
+
+/* GPU Hardware Acceleration for heavy cards & backdrop blurs */
+.backdrop-blur-2xl,
+.backdrop-blur-xl,
+.backdrop-blur-md {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Force hardware rasterization on SplashScreen particle canvas */
+canvas {
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* Fix Toastify rounded corners & progress bar bleed */

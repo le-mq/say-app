@@ -320,6 +320,34 @@ export default function Friends() {
       {/* SUB-TAB CONTENT */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
+        {/* Mobile / Responsive Sub-tab Switcher (shown when screen < lg) */}
+        <div className="lg:hidden flex items-center gap-1.5 mb-6 bg-[#091e30] p-1 rounded-2xl border border-[#163a56] w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('feed')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeSubTab === 'feed'
+                ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <Radio className="w-3.5 h-3.5" />
+            <span>Friends Feed</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('hub')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              activeSubTab === 'hub'
+                ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <UserCheck className="w-3.5 h-3.5" />
+            <span>Friendship Hub</span>
+          </button>
+        </div>
+
         {/* SUB-TAB A: FRIENDS FEED (Chapter 5.3) */}
         {activeSubTab === 'feed' && (
           <div className="space-y-6">

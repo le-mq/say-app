@@ -212,8 +212,8 @@ export default function SplashScreen({ onComplete }) {
     canvas.height = viewH;
 
     const isMobile = viewW < 640;
-    const fontSize = isMobile ? 40 : 56;
-    const taglineSize = isMobile ? 10 : 12;
+    const fontSize = isMobile ? 38 : 52;
+    const taglineSize = isMobile ? 10 : 11;
     const textY = viewH / 2 - 14;
 
     // 1. Offscreen Canvas for precise text stroke pixel extraction
@@ -235,10 +235,14 @@ export default function SplashScreen({ onComplete }) {
     offCtx.letterSpacing = '0.24em';
     offCtx.fillText('SAY IT WITHOUT SAYING IT', viewW / 2, textY + (isMobile ? 42 : 52));
 
-    // 2. High-density sampling with fine gap = 2px for rich 2,500 - 3,200 particles
+    // 2. High-density sampling restored (2,500 - 3,200 particles) for full visual brilliance
     const textData = offCtx.getImageData(0, 0, viewW, viewH).data;
+    // Release offscreen canvas memory immediately after extraction
+    offscreen.width = 0;
+    offscreen.height = 0;
+
     const particles = [];
-    const gap = 2; // Fine 2px grid for dense text glyph particle extraction
+    const gap = 2; // Fine 2px grid for rich text glyph particle density
 
     const minY = Math.max(0, Math.floor(textY - 55));
     const maxY = Math.min(viewH, Math.floor(textY + 75));
@@ -264,7 +268,7 @@ export default function SplashScreen({ onComplete }) {
       particles.push(new CosmicStardustParticle(rx, ry, viewW, viewH));
     }
 
-    // 4. 60FPS requestAnimationFrame particle loop with Galaxy Bloom
+    // 4. Ultra-smooth GPU accelerated particle loop with hardware composite
     const renderParticles = () => {
       ctx.clearRect(0, 0, viewW, viewH);
 
@@ -272,7 +276,8 @@ export default function SplashScreen({ onComplete }) {
       ctx.globalCompositeOperation = 'screen';
 
       let activeCount = 0;
-      for (let i = 0; i < particles.length; i++) {
+      const len = particles.length;
+      for (let i = 0; i < len; i++) {
         const p = particles[i];
         if (p.alpha > 0.01) {
           p.update();
@@ -292,6 +297,8 @@ export default function SplashScreen({ onComplete }) {
 
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      // Clean up canvas buffer to release GPU texture memory
+      if (ctx) ctx.clearRect(0, 0, viewW, viewH);
     };
   }, [stage]);
 

@@ -19,7 +19,7 @@ import { toast } from 'react-toastify';
 export default function MyUniverse() {
   const { user, setUser, setStudioOpen } = useAuthStore();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Mode: Synchronized seamlessly with Navbar query parameter ('CONSTELLATION' | 'TIMELINE')
   const viewMode = (searchParams.get('view') || 'constellation').toUpperCase();
@@ -101,6 +101,34 @@ export default function MyUniverse() {
       {/* MAIN WORKSPACE CONTENT (Full vertical height dedicated to Celestial Map) */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-12 space-y-10">
         
+        {/* Mobile / Responsive View Switcher (shown when screen < lg) */}
+        <div className="lg:hidden flex items-center gap-1.5 bg-[#091e30] p-1 rounded-2xl border border-[#163a56] w-fit">
+          <button
+            type="button"
+            onClick={() => setSearchParams({ view: 'constellation' })}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'CONSTELLATION'
+                ? 'bg-[#184266] text-cyan-200 border border-cyan-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+            <span>Constellation</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchParams({ view: 'timeline' })}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              viewMode === 'TIMELINE'
+                ? 'bg-[#184266] text-indigo-300 border border-indigo-500/40 shadow-sm'
+                : 'text-[#91B9C5]/70 hover:text-white'
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-300" />
+            <span>Timeline</span>
+          </button>
+        </div>
+
         {/* SECTION A: AUDIO CONSTELLATION & MEMORY TIMELINE */}
         <section className="space-y-4">
           {/* Active View Container */}

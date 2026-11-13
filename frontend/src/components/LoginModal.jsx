@@ -131,6 +131,7 @@ export default function LoginModal() {
                     streakDays: authenticatedUser.streakDays ?? 0,
                     bestStreakDays: authenticatedUser.bestStreakDays ?? authenticatedUser.streakDays ?? 0,
                     notesCount: authenticatedUser.notesCount || 0,
+                    role: authenticatedUser.role || resolvedUser.role || 'USER',
                   };
                   localStorage.setItem(`say_setup_done_${userKey}`, 'true');
                   localStorage.setItem(`say_handle_${userKey}`, resolvedHandle);
@@ -211,6 +212,7 @@ export default function LoginModal() {
             ? (userResult.displayName || savedDisplayName || "Audiophile")
             : (savedDisplayName || userResult.displayName || "Audiophile"),
           handle: `@${resolvedUsername}`,
+          role: userResult.role || 'USER',
         };
         setUser(safeUser);
         toast.success(`Welcome back, ${safeUser.displayName}!`);
@@ -265,6 +267,7 @@ export default function LoginModal() {
       streakDays: tempUser.streakDays ?? 0,
       bestStreakDays: tempUser.bestStreakDays ?? tempUser.streakDays ?? 0,
       notesCount: tempUser.notesCount || 0,
+      role: tempUser.role || 'USER',
     };
 
     try {
@@ -281,6 +284,7 @@ export default function LoginModal() {
             username: updatedUser.username || cleanUsername,
             displayName: updatedUser.displayName || finalDisplayName,
             handle: `@${updatedUser.username || cleanUsername}`,
+            role: updatedUser.role || safeUser.role || 'USER',
           };
         }
       }
