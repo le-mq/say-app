@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { 
   Play, Pause, Heart, Bookmark, MessageSquare, Plus, 
@@ -8,6 +9,8 @@ import {
 import { formatTime } from '../services/musicService';
 import { formatTimeDetails } from '../utils/timeFormat';
 import { usePlayerStore } from '../store/playerStore';
+import { useAuthStore, authStore } from '../store/authStore';
+import { noteService } from '../services/noteService';
 
 export default function MusicNoteCard({ 
   note, 
@@ -18,13 +21,15 @@ export default function MusicNoteCard({
   compact = false 
 }) {
   const [likes, setLikes] = useState(note?.likesCount ?? note?.likes ?? 0);
-  const [isLiked, setIsLiked] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
+  const [isLiked, setIsLiked] = useState(Boolean(note?.isLiked));
+  const [saves, setSaves] = useState(note?.savesCount ?? 0);
+  const [isSaved, setIsSaved] = useState(Boolean(note?.isSaved));
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replySongTitle, setReplySongTitle] = useState('');
   const [replyText, setReplyText] = useState('');
   const [replies, setReplies] = useState(note?.dialogues || []);
   const svgGalaxyRef = useRef(null);
+  const navigate = useNavigate();
 
   const { currentTrackId, globalIsPlaying, playTrack, togglePlay } = usePlayerStore(
     (s) => ({ currentTrackId: s.currentTrack?.id, globalIsPlaying: s.isPlaying })
@@ -45,20 +50,109 @@ export default function MusicNoteCard({
 
   useEffect(() => {
     setLikes(note?.likesCount ?? note?.likes ?? 0);
+    setSaves(note?.savesCount ?? 0);
+    if (typeof note?.isLiked === 'boolean') {
+      setIsLiked(note.isLiked);
+    }
+    if (typeof note?.isSaved === 'boolean') {
+      setIsSaved(note.isSaved);
+    }
     setReplies(note?.dialogues || []);
-  }, [note?.likesCount, note?.likes, note?.dialogues]);
+  }, [note?.likesCount, note?.likes, note?.savesCount, note?.isLiked, note?.isSaved, note?.dialogues]);
+
+  useEffect(() => {
+    const handleRemoteSynced = (e) => {
+      if (String(e.detail?.noteId) === String(note?.id)) {
+        if (typeof e.detail.likesCount === 'number') {
+          setLikes(e.detail.likesCount);
+        }
+        if (typeof e.detail.savesCount === 'number') {
+          setSaves(e.detail.savesCount);
+        }
+      }
+    };
+    window.addEventListener('say_note_synced', handleRemoteSynced);
+    window.addEventListener('say_note_liked', handleRemoteSynced);
+    window.addEventListener('say_note_saved', handleRemoteSynced);
+    return () => {
+      window.removeEventListener('say_note_synced', handleRemoteSynced);
+      window.removeEventListener('say_note_liked', handleRemoteSynced);
+      window.removeEventListener('say_note_saved', handleRemoteSynced);
+    };
+  }, [note?.id]);
 
   const timeInfo = formatTimeDetails(note?.createdAt);
   const formattedTimeAgo = note?.timeAgo || timeInfo.relative || "Just now";
 
-  const handleLike = () => {
-    setIsLiked(prev => !prev);
-    setLikes(prev => isLiked ? prev - 1 : prev + 1);
+  const handleLike = async (e) => {
+    if (e) e.stopPropagation();
+    const currentUser = authStore.getState().user;
+    if (!currentUser?.id) {
+      toast.info('Please sign in to like music notes');
+      return;
+    }
+
+    const nextIsLiked = !isLiked;
+    setIsLiked(nextIsLiked);
+    setLikes(prev => (nextIsLiked ? prev + 1 : Math.max(0, prev - 1)));
+
+    try {
+      const res = await noteService.toggleLikeNote(note.id, currentUser.id);
+      const updated = res?.data?.data || res?.data || res;
+      if (typeof updated?.likesCount === 'number') {
+        setLikes(updated.likesCount);
+      }
+      if (typeof updated?.isLiked === 'boolean') {
+        setIsLiked(updated.isLiked);
+      }
+      window.dispatchEvent(new CustomEvent('say_note_liked', {
+        detail: { 
+          noteId: note.id, 
+          likesCount: updated?.likesCount ?? (nextIsLiked ? likes + 1 : Math.max(0, likes - 1)),
+          savesCount: updated?.savesCount ?? saves
+        }
+      }));
+    } catch (err) {
+      console.warn('Error liking note:', err);
+      setIsLiked(!nextIsLiked);
+      setLikes(prev => (!nextIsLiked ? prev + 1 : Math.max(0, prev - 1)));
+    }
   };
 
-  const handleSave = () => {
-    setIsSaved(prev => !prev);
+  const handleSave = async (e) => {
+    if (e) e.stopPropagation();
+    const currentUser = authStore.getState().user;
+    if (!currentUser?.id) {
+      toast.info('Please sign in to save notes');
+      return;
+    }
+
+    const nextIsSaved = !isSaved;
+    setIsSaved(nextIsSaved);
+    setSaves(prev => (nextIsSaved ? prev + 1 : Math.max(0, prev - 1)));
     toast.success(!isSaved ? "Saved to your Notes Vault!" : "Removed from Vault");
+
+    try {
+      const res = await noteService.toggleSaveNote(note.id, currentUser.id);
+      const updated = res?.data?.data || res?.data || res;
+      if (typeof updated?.savesCount === 'number') {
+        setSaves(updated.savesCount);
+      }
+      if (typeof updated?.isSaved === 'boolean') {
+        setIsSaved(updated.isSaved);
+      }
+      window.dispatchEvent(new CustomEvent('say_note_saved', {
+        detail: { 
+          noteId: note.id, 
+          savesCount: updated?.savesCount ?? (nextIsSaved ? saves + 1 : Math.max(0, saves - 1)),
+          likesCount: updated?.likesCount ?? likes
+        }
+      }));
+    } catch (err) {
+      console.warn('Error saving note:', err);
+      setIsSaved(!nextIsSaved);
+      setSaves(prev => (!nextIsSaved ? prev + 1 : Math.max(0, prev - 1)));
+    }
   };
 
   const handleAddReply = (e) => {
@@ -319,25 +413,28 @@ export default function MusicNoteCard({
   return (
     <article 
       onClick={handleCardClick}
-      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 overflow-hidden ${
+      className={`relative w-full max-w-[440px] rounded-3xl p-4 sm:p-5 flex flex-col justify-between transition-all duration-500 select-text backdrop-blur-2xl cursor-pointer group/notecard bg-[#0d2035]/75 overflow-hidden ${
         isFriendsOnly
-          ? 'border-2 border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.2),0_20px_50px_rgba(0,0,0,0.85)] ring-1 ring-emerald-400/40'
-          : 'border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
+          ? 'border-2 border-emerald-400/60 shadow-[0_0_24px_rgba(52,211,153,0.15),0_8px_32px_rgba(0,0,0,0.5)] ring-1 ring-emerald-400/40'
+          : 'border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] hover:border-violet-300/30'
       } ${
         compact ? 'h-[360px] p-3' : 'h-[500px]'
       } ${
         isActive 
-          ? 'opacity-100' 
+          ? 'opacity-100 ring-1 ring-violet-300/20' 
           : 'opacity-85 hover:opacity-100'
       }`}
     >
-      {/* Harmonized ambient backlight identical to Right/Left panels */}
+      {/* Top glass gradient edge highlight */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-violet-300/35 to-transparent pointer-events-none" />
+
+      {/* Harmonized ambient backlight with subtle powdery lavender mist & champagne gold */}
       <div 
-        className="absolute -top-12 -right-12 w-48 h-48 rounded-full filter blur-3xl opacity-20 pointer-events-none transition-all duration-1000 group-hover/notecard:opacity-30"
+        className="absolute -top-12 -right-12 w-48 h-48 rounded-full filter blur-3xl opacity-25 pointer-events-none transition-all duration-1000 group-hover/notecard:opacity-35"
         style={{
           background: isFriendsOnly
             ? 'radial-gradient(circle, rgba(52,211,153,0.25) 0%, rgba(0,89,76,0.15) 50%, transparent 100%)'
-            : 'radial-gradient(circle, rgba(56,189,248,0.18) 0%, rgba(0,89,76,0.12) 50%, transparent 100%)'
+            : 'radial-gradient(circle, rgba(196,181,253,0.18) 0%, rgba(251,191,36,0.06) 40%, rgba(145,185,197,0.06) 70%, transparent 100%)'
         }}
       />
 
@@ -351,9 +448,20 @@ export default function MusicNoteCard({
       )}
       
       {/* 1. HEADER: User Identity, Time & Emotion Tag (Chapter 4.7) */}
-      <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-sky-500/20 shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-full overflow-hidden bg-[#102942] border border-sky-400/40 shrink-0">
+      <div className="relative z-10 flex items-center justify-between gap-2 pb-2.5 border-b border-violet-300/15 shrink-0">
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            const target = note.username || (note.userHandle ? note.userHandle.replace(/^@/, '') : '') || note.userId;
+            if (target) {
+              const currentUser = authStore.getState().user;
+              navigate(currentUser?.id === note.userId ? '/profile' : `/profile/${encodeURIComponent(target)}`);
+            }
+          }}
+          className="flex items-center gap-2.5 min-w-0 hover:opacity-85 transition-opacity cursor-pointer"
+          title="View profile"
+        >
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-[#102942] border border-violet-300/30 shrink-0">
             {note.userAvatarUrl ? (
               <img src={note.userAvatarUrl} alt={note.userDisplayName} className="w-full h-full object-cover" />
             ) : (
@@ -363,7 +471,7 @@ export default function MusicNoteCard({
             )}
           </div>
           <div className="truncate">
-            <h4 className="text-xs font-bold text-[#E8EEF0] truncate leading-tight flex items-center gap-1">
+            <h4 className="text-xs font-bold text-[#E8EEF0] truncate leading-tight flex items-center gap-1 hover:text-cyan-300 transition-colors">
               <span>{note.userDisplayName || "Audiophile"}</span>
             </h4>
             <p className="text-[10px] font-mono text-[#91B9C5] truncate flex items-center gap-1.5">
@@ -399,7 +507,7 @@ export default function MusicNoteCard({
             </span>
           )}
           {note.emotionTag && (
-            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#0c243a]/90 text-sky-200 border border-sky-400/40 shadow-xs">
+            <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-gradient-to-r from-violet-500/15 via-[#0c243a]/90 to-amber-500/10 text-violet-200 border border-violet-300/30 shadow-xs backdrop-blur-sm">
               {note.emotionTag}
             </span>
           )}
@@ -1081,12 +1189,13 @@ export default function MusicNoteCard({
           <button
             type="button"
             onClick={handleSave}
-            className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-mono transition-colors cursor-pointer ${
               isSaved ? 'text-sky-300 bg-sky-950/70 border border-sky-400/40' : 'text-[#91B9C5]/80 hover:text-white hover:bg-white/[0.05]'
             }`}
-            title={isSaved ? "Saved" : "Save to Vault"}
+            title={isSaved ? "Saved to Vault" : "Save to Vault"}
           >
             <Bookmark className={`w-3.5 h-3.5 ${isSaved ? 'fill-current' : ''}`} />
+            <span className="text-[10px] text-neutral-300 font-bold">{saves}</span>
           </button>
         </div>
 

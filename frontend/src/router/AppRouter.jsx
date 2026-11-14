@@ -21,6 +21,7 @@ const router = createBrowserRouter([
       { path: 'universe', element: <PrivateRoute Component={MyUniverse} /> },
       { path: 'my-universe', element: <Navigate to="/universe" replace /> },
       { path: 'profile', element: <PrivateRoute Component={Profile} /> },
+      { path: 'profile/:username', element: <PrivateRoute Component={Profile} /> },
       { path: 'friends', element: <PrivateRoute Component={Friends} /> },
       { path: 'admin', element: <PrivateRoute Component={AdminDashboard} /> },
 

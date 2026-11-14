@@ -1,14 +1,22 @@
 import { api } from './api';
 
 export const noteService = {
-  getPublicFeed: async () => {
-    return api.get('/notes/feed/public');
+  getPublicFeed: async (viewerId) => {
+    const query = viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : '';
+    return api.get(`/notes/feed/public${query}`);
   },
   getFriendsFeed: async (userId) => {
     return api.get(`/notes/feed/friends?userId=${userId}`);
   },
-  getUserNotes: async (userId) => {
-    return api.get(`/notes/user/${userId}`);
+  getUserNotes: async (userId, viewerId) => {
+    const query = viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : '';
+    return api.get(`/notes/user/${userId}${query}`);
+  },
+  toggleLikeNote: async (noteId, userId) => {
+    return api.post(`/notes/${noteId}/like?userId=${userId}`);
+  },
+  toggleSaveNote: async (noteId, userId) => {
+    return api.post(`/notes/${noteId}/save?userId=${userId}`);
   },
   getNoteById: async (noteId) => {
     return api.get(`/notes/${noteId}`);

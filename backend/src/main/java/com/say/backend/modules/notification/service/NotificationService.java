@@ -121,6 +121,44 @@ public class NotificationService implements INotificationService {
     }
 
     @Override
+    public void dispatchSilentEvent(UUID recipientId, String eventType, Object payload) {
+        List<SseEmitter> emitters = userEmitters.get(recipientId);
+        if (emitters != null && !emitters.isEmpty()) {
+            List<SseEmitter> deadEmitters = new CopyOnWriteArrayList<>();
+            for (SseEmitter emitter : emitters) {
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name(eventType)
+                            .data(payload != null ? payload : "{}"));
+                } catch (Exception e) {
+                    deadEmitters.add(emitter);
+                }
+            }
+            emitters.removeAll(deadEmitters);
+        }
+    }
+
+    @Override
+    public void broadcastSilentEvent(String eventType, Object payload) {
+        for (Map.Entry<UUID, List<SseEmitter>> entry : userEmitters.entrySet()) {
+            List<SseEmitter> emitters = entry.getValue();
+            if (emitters != null && !emitters.isEmpty()) {
+                List<SseEmitter> deadEmitters = new CopyOnWriteArrayList<>();
+                for (SseEmitter emitter : emitters) {
+                    try {
+                        emitter.send(SseEmitter.event()
+                                .name(eventType)
+                                .data(payload != null ? payload : "{}"));
+                    } catch (Exception e) {
+                        deadEmitters.add(emitter);
+                    }
+                }
+                emitters.removeAll(deadEmitters);
+            }
+        }
+    }
+
+    @Override
     @Async("taskExecutor")
     @Transactional(readOnly = true)
     public CompletableFuture<List<NotificationDto>> getNotifications(UUID recipientId, int limit) {
@@ -181,6 +219,51 @@ public class NotificationService implements INotificationService {
     @Override
     @Async("taskExecutor")
     @Transactional
+    public CompletableFuture<Void> markAsUnread(UUID notificationId, UUID recipientId) {
+        try {
+            Notification notification = notificationRepository.findById(notificationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Notification not found: " + notificationId));
+
+            if (!notification.getRecipient().getId().equals(recipientId)) {
+                throw new AppException("Unauthorized to update this notification");
+            }
+
+            notification.setRead(false);
+            notificationRepository.save(notification);
+            return CompletableFuture.completedFuture(null);
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error marking notification {} as unread: {}", notificationId, e.getMessage());
+            throw new AppException("Failed to mark notification as unread: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional
+    public CompletableFuture<Void> deleteNotification(UUID notificationId, UUID recipientId) {
+        try {
+            Notification notification = notificationRepository.findById(notificationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Notification not found: " + notificationId));
+
+            if (!notification.getRecipient().getId().equals(recipientId)) {
+                throw new AppException("Unauthorized to delete this notification");
+            }
+
+            notificationRepository.delete(notification);
+            return CompletableFuture.completedFuture(null);
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error deleting notification {}: {}", notificationId, e.getMessage());
+            throw new AppException("Failed to delete notification: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional
     public CompletableFuture<Void> markAllAsRead(UUID recipientId) {
         try {
             notificationRepository.markAllAsRead(recipientId);
@@ -191,6 +274,16 @@ public class NotificationService implements INotificationService {
             log.error("Error marking all notifications as read for {}: {}", recipientId, e.getMessage());
             throw new AppException("Failed to mark all as read: " + e.getMessage());
         }
+    }
+
+    @Override
+    public int getActiveConnectionsCount() {
+        return userEmitters.values().stream().mapToInt(List::size).sum();
+    }
+
+    @Override
+    public int getActiveUsersCount() {
+        return (int) userEmitters.values().stream().filter(l -> !l.isEmpty()).count();
     }
 
     private NotificationDto mapToDto(Notification n) {

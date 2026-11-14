@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { authStore, useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
 import { buildPlayableTrack } from '../utils/snippetUtils';
 import { noteService } from '../services/noteService';
 import { authService } from '../services/authService';
+import { socialService } from '../services/socialService';
 import { calculateCurrentStreak } from '../utils/streakUtils';
 import MusicNoteCard from '../components/MusicNoteCard';
 import { 
   Flame, User, Edit3, X, Check, Disc, Play, 
-  ExternalLink, Sparkles, Globe, Music, Trash2, AlertTriangle, Image as ImageIcon, Users
+  ExternalLink, Sparkles, Globe, Music, Trash2, AlertTriangle, Image as ImageIcon, Users,
+  ArrowLeft, UserPlus, UserCheck, UserMinus, Clock
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
@@ -26,12 +28,33 @@ export default function Profile() {
   const { user, setUser, setStudioOpen, deleteAccount } = useAuthStore();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
   const navigate = useNavigate();
+  const { username: routeUsername } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  const queryUsername = searchParams.get('u') || searchParams.get('username');
+  const queryId = searchParams.get('id') || searchParams.get('userId');
+  const targetIdentifier = routeUsername || queryUsername || queryId;
+
+  const cleanIdentifier = targetIdentifier ? targetIdentifier.replace(/^@/, '').trim() : '';
+  const isOwnProfile = !cleanIdentifier || 
+    (user && (
+      (user.username && user.username.toLowerCase() === cleanIdentifier.toLowerCase()) ||
+      (user.id && user.id === cleanIdentifier)
+    ));
+
+  // Target user profile & friendship status when viewing someone else
+  const [targetUser, setTargetUser] = useState(null);
+  const [friendshipStatus, setFriendshipStatus] = useState('NONE'); // 'CONNECTED' | 'PENDING_OUTGOING' | 'PENDING_INCOMING' | 'NONE'
+  const [pendingReqId, setPendingReqId] = useState(null);
+  const [friendshipId, setFriendshipId] = useState(null);
+  const [friendshipActionPending, setFriendshipActionPending] = useState(false);
+
+  const displayedUser = isOwnProfile ? user : targetUser;
 
   const [notes, setNotes] = useState([]);
   const [visibilityFilter, setVisibilityFilter] = useState('ALL'); // 'ALL' | 'PUBLIC' | 'FRIENDS_ONLY'
   const [isLoading, setIsLoading] = useState(true);
-  const [streakDays, setStreakDays] = useState(user?.streakDays ?? 0);
+  const [streakDays, setStreakDays] = useState(displayedUser?.streakDays ?? 0);
 
   // Edit Profile Modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState(searchParams.get('modal') === 'edit');
@@ -46,12 +69,182 @@ export default function Profile() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
+  // Check friendship status between current user and target user
+  const checkFriendship = async (resolvedTargetId) => {
+    const peerId = resolvedTargetId || targetUser?.id;
+    if (!user?.id || isOwnProfile || !peerId) return;
+    try {
+      const [friendsRes, pendingRes] = await Promise.allSettled([
+        socialService.getFriendsList(user.id),
+        socialService.getPendingRequests(user.id)
+      ]);
+      const friends = friendsRes.status === 'fulfilled'
+        ? (Array.isArray(friendsRes.value) ? friendsRes.value : (friendsRes.value?.data?.data || friendsRes.value?.data || []))
+        : [];
+      const pending = pendingRes.status === 'fulfilled'
+        ? (Array.isArray(pendingRes.value) ? pendingRes.value : (pendingRes.value?.data?.data || pendingRes.value?.data || []))
+        : [];
+
+      const friendMatch = friends.find(f => (f.friendId || f.id) === peerId);
+      if (friendMatch) {
+        setFriendshipStatus('CONNECTED');
+        setFriendshipId(friendMatch.friendshipId || friendMatch.id);
+        return;
+      }
+
+      const pendingMatch = pending.find(r => 
+        (r.requesterId === user.id && r.addresseeId === peerId) ||
+        (r.requesterId === peerId && r.addresseeId === user.id)
+      );
+
+      if (pendingMatch) {
+        setPendingReqId(pendingMatch.id);
+        if (pendingMatch.requesterId === user.id) {
+          setFriendshipStatus('PENDING_OUTGOING');
+        } else {
+          setFriendshipStatus('PENDING_INCOMING');
+        }
+        return;
+      }
+
+      setFriendshipStatus('NONE');
+    } catch (e) {
+      console.warn('Error checking friendship status', e);
+      setFriendshipStatus('NONE');
+    }
+  };
+
+  // Load target user profile when viewing someone else
+  useEffect(() => {
+    if (isOwnProfile) {
+      setTargetUser(null);
+      return;
+    }
+    let isMounted = true;
+    async function loadTargetProfile() {
+      try {
+        let data = null;
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanIdentifier);
+        
+        // 1. Try username lookup first
+        if (!isUuid) {
+          try {
+            const res = await authService.getUserByUsername(cleanIdentifier);
+            data = res?.data?.data || res?.data || res;
+          } catch (e) {
+            console.warn('Username lookup failed, trying ID fallback', e);
+          }
+        }
+
+        // 2. Fallback to ID lookup
+        if (!data) {
+          const res = await authService.getProfile(cleanIdentifier);
+          data = res?.data?.data || res?.data || res;
+        }
+
+        if (isMounted && data && typeof data === 'object' && (data.id || data.displayName || data.username)) {
+          setTargetUser(data);
+          if (typeof data.streakDays === 'number') {
+            setStreakDays(data.streakDays);
+          }
+          if (data.id) {
+            checkFriendship(data.id);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load target user profile', err);
+      }
+    }
+
+    loadTargetProfile();
+    return () => { isMounted = false; };
+  }, [cleanIdentifier, isOwnProfile]);
+
+  // Friendship Actions
+  const handleSendFriendRequest = async () => {
+    const peerId = targetUser?.id;
+    if (!user?.id || !peerId) {
+      toast.error('Please sign in to add friends');
+      return;
+    }
+    setFriendshipActionPending(true);
+    try {
+      await socialService.sendFriendRequest(user.id, peerId);
+      setFriendshipStatus('PENDING_OUTGOING');
+      toast.success(`Friend request sent to ${targetUser?.displayName || 'user'}!`);
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
+      await checkFriendship(peerId);
+    } catch (err) {
+      toast.error(err?.message || 'Could not send friend request');
+    } finally {
+      setFriendshipActionPending(false);
+    }
+  };
+
+  const handleAcceptFriendRequest = async () => {
+    const peerId = targetUser?.id;
+    if (!user?.id || !pendingReqId) return;
+    setFriendshipActionPending(true);
+    try {
+      await socialService.acceptFriendRequest(pendingReqId, user.id);
+      setFriendshipStatus('CONNECTED');
+      toast.success(`Connected with ${targetUser?.displayName || 'user'}!`);
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
+      if (peerId) await checkFriendship(peerId);
+    } catch (err) {
+      toast.error(err?.message || 'Could not accept friend request');
+    } finally {
+      setFriendshipActionPending(false);
+    }
+  };
+
+  const handleCancelOrRejectFriendRequest = async () => {
+    const peerId = targetUser?.id;
+    if (!user?.id || !pendingReqId) return;
+    setFriendshipActionPending(true);
+    try {
+      if (friendshipStatus === 'PENDING_OUTGOING') {
+        await socialService.removeFriend(pendingReqId, user.id);
+        toast.info('Friend request cancelled');
+      } else {
+        await socialService.rejectFriendRequest(pendingReqId, user.id);
+        toast.info('Friend request declined');
+      }
+      setFriendshipStatus('NONE');
+      setPendingReqId(null);
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
+      if (peerId) await checkFriendship(peerId);
+    } catch (err) {
+      toast.error(err?.message || 'Could not update friend request');
+    } finally {
+      setFriendshipActionPending(false);
+    }
+  };
+
+  const handleRemoveFriend = async () => {
+    const peerId = targetUser?.id;
+    if (!user?.id || !friendshipId) return;
+    setFriendshipActionPending(true);
+    try {
+      await socialService.removeFriend(friendshipId, user.id);
+      setFriendshipStatus('NONE');
+      setFriendshipId(null);
+      toast.info(`Removed ${targetUser?.displayName || 'user'} from friends`);
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
+      if (peerId) await checkFriendship(peerId);
+    } catch (err) {
+      toast.error(err?.message || 'Could not remove friend');
+    } finally {
+      setFriendshipActionPending(false);
+    }
+  };
+
   // Handle URL query trigger for modal
   useEffect(() => {
-    if (searchParams.get('modal') === 'edit') {
+    if (searchParams.get('modal') === 'edit' && isOwnProfile) {
       setIsEditModalOpen(true);
     }
-  }, [searchParams]);
+  }, [searchParams, isOwnProfile]);
 
   const handleCloseEditModal = () => {
     setIsEditModalOpen(false);
@@ -63,38 +256,52 @@ export default function Profile() {
 
   // Sync edit state with active user
   useEffect(() => {
-    if (user) {
+    if (user && isOwnProfile) {
       setEditName(user.displayName || '');
       setEditHandle(user.username || (user.handle ? user.handle.replace(/^@/, '') : ''));
       setEditAvatarUrl(user.avatarUrl || '');
       setEditBio(user.bio || 'Curating timeless records on SAY.');
     }
-  }, [user]);
+  }, [user, isOwnProfile]);
 
-  // Load all published notes belonging to this user (Public and Friends Circle)
+  // Load published notes belonging to this user
   useEffect(() => {
     let isMounted = true;
+    const activeUserId = isOwnProfile ? user?.id : targetUser?.id;
 
     async function loadUserNotes() {
+      if (!activeUserId) {
+        if (!isOwnProfile && !targetUser) return;
+        setNotes([]);
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
-        if (user?.id) {
-          const res = await noteService.getUserNotes(user.id);
-          const userNotes = Array.isArray(res) ? res : (res?.data?.data || res?.data || []);
-          
-          // Calculate true streak from all user notes
-          const computedStreak = calculateCurrentStreak(userNotes);
-          setStreakDays(computedStreak);
+        const res = await noteService.getUserNotes(activeUserId, user?.id);
+        const rawNotes = Array.isArray(res) ? res : (res?.data?.data || res?.data || res || []);
+        
+        // Strict privacy: if not friends and not own profile, only public notes are visible
+        const isFriend = friendshipStatus === 'CONNECTED';
+        const userNotes = (isOwnProfile || isFriend)
+          ? rawNotes
+          : rawNotes.filter(n => (n.visibility || 'PUBLIC').toUpperCase() === 'PUBLIC');
+
+        // Calculate true streak from notes
+        const computedStreak = calculateCurrentStreak(userNotes);
+        setStreakDays(computedStreak);
+        if (isOwnProfile) {
           const latestUser = authStore.getState().user;
           if (latestUser && latestUser.streakDays !== computedStreak) {
             setUser({ ...latestUser, streakDays: computedStreak });
           }
+        }
 
-          if (isMounted) {
-            setNotes(userNotes);
-            setIsLoading(false);
-            return;
-          }
+        if (isMounted) {
+          setNotes(userNotes);
+          setIsLoading(false);
+          return;
         }
       } catch (err) {
         console.warn('Could not fetch user notes from backend', err);
@@ -108,17 +315,46 @@ export default function Profile() {
 
     loadUserNotes();
 
-    // Instant update when a new note is published from StudioModal
     const handleNoteCreated = () => {
       loadUserNotes();
     };
+    const handleFriendshipUpdated = () => {
+      if (!isOwnProfile && targetUser?.id) {
+        checkFriendship(targetUser.id);
+      }
+    };
+    const handleNoteSynced = (e) => {
+      const syncNoteId = String(e?.detail?.noteId || '');
+      if (!syncNoteId) return;
+      setNotes((prevNotes) =>
+        prevNotes.map((item) => {
+          if (String(item.id) === syncNoteId) {
+            return {
+              ...item,
+              likesCount: typeof e.detail.likesCount === 'number' ? e.detail.likesCount : item.likesCount,
+              savesCount: typeof e.detail.savesCount === 'number' ? e.detail.savesCount : item.savesCount,
+            };
+          }
+          return item;
+        })
+      );
+    };
+
     window.addEventListener('say_note_created', handleNoteCreated);
+    window.addEventListener('say_friendship_updated', handleFriendshipUpdated);
+    window.addEventListener('say_note_synced', handleNoteSynced);
+    window.addEventListener('say_note_liked', handleNoteSynced);
+    window.addEventListener('say_note_saved', handleNoteSynced);
 
     return () => {
       isMounted = false;
       window.removeEventListener('say_note_created', handleNoteCreated);
+      window.removeEventListener('say_friendship_updated', handleFriendshipUpdated);
+      window.removeEventListener('say_note_synced', handleNoteSynced);
+      window.removeEventListener('say_note_liked', handleNoteSynced);
+      window.removeEventListener('say_note_saved', handleNoteSynced);
     };
-  }, [user?.id, setUser]);
+  }, [user?.id, targetUser?.id, isOwnProfile, friendshipStatus, setUser]);
 
   // Computed visibility filters
   const publicCount = useMemo(() => {
@@ -235,8 +471,8 @@ export default function Profile() {
     playTrack(track, options);
   };
 
-  const initials = user?.displayName
-    ? user.displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+  const initials = displayedUser?.displayName
+    ? displayedUser.displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : 'LT';
 
   return (
@@ -244,66 +480,152 @@ export default function Profile() {
       
       {/* 1. HORIZONTAL PROFILE IDENTITY BANNER */}
       <section className="relative w-full border-b border-[#122e47] bg-gradient-to-b from-[#0b2034] via-[#081827] to-[#071523] py-7 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center sm:items-center justify-between gap-6">
+        <div className="max-w-5xl mx-auto space-y-4">
           
-          {/* Left: Avatar + Identity Info */}
-          <div className="flex items-center gap-5 min-w-0 flex-1">
-            {/* Avatar with Streak Badge */}
-            <div className="relative shrink-0">
-              <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl overflow-hidden bg-[#0a1f33] border border-[#1f486d] shadow-xl flex items-center justify-center text-xl font-bold text-[#E8EEF0]">
-                {user?.avatarUrl ? (
-                  <img
-                    src={user.avatarUrl}
-                    alt={user.displayName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>{initials}</span>
-                )}
-              </div>
-
-              {/* Streak Badge */}
-              <div
-                className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-[#081827] shadow-md flex items-center gap-1 text-[11px] font-mono font-bold border ${
-                  streakDays >= 7 ? 'border-orange-500/50 text-orange-400' : 'border-cyan-500/40 text-cyan-300'
-                }`}
-                title="Daily Music Note Streak"
+          {/* Back button when viewing another user */}
+          {!isOwnProfile && (
+            <div>
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#091f33] hover:bg-[#122e47] text-xs font-bold text-cyan-300 border border-cyan-500/30 transition-colors cursor-pointer"
               >
-                <Flame className={`w-3 h-3 ${
-                  streakDays >= 7 ? 'fill-orange-400 animate-pulse text-orange-400' : 'fill-cyan-300/30 text-cyan-300'
-                }`} />
-                <span>{streakDays}d</span>
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col sm:flex-row items-center sm:items-center justify-between gap-6">
+            
+            {/* Left: Avatar + Identity Info */}
+            <div className="flex items-center gap-5 min-w-0 flex-1">
+              {/* Avatar with Streak Badge */}
+              <div className="relative shrink-0">
+                <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-2xl overflow-hidden bg-[#0a1f33] border border-[#1f486d] shadow-xl flex items-center justify-center text-xl font-bold text-[#E8EEF0]">
+                  {displayedUser?.avatarUrl ? (
+                    <img
+                      src={displayedUser.avatarUrl}
+                      alt={displayedUser.displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
+                </div>
+
+                {/* Streak Badge */}
+                <div
+                  className={`absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full bg-[#081827] shadow-md flex items-center gap-1 text-[11px] font-mono font-bold border ${
+                    streakDays >= 7 ? 'border-orange-500/50 text-orange-400' : 'border-cyan-500/40 text-cyan-300'
+                  }`}
+                  title="Daily Music Note Streak"
+                >
+                  <Flame className={`w-3 h-3 ${
+                    streakDays >= 7 ? 'fill-orange-400 animate-pulse text-orange-400' : 'fill-cyan-300/30 text-cyan-300'
+                  }`} />
+                  <span>{streakDays}d</span>
+                </div>
+              </div>
+
+              {/* Display Name (top), Username (middle), Bio (bottom) */}
+              <div className="min-w-0 flex-1 space-y-1">
+                <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#E8EEF0] tracking-wide truncate leading-tight">
+                  {displayedUser?.displayName || 'Audiophile'}
+                </h1>
+                
+                <p className="text-xs font-mono text-cyan-300/80 leading-none">
+                  @{displayedUser?.username || 'listener'}
+                </p>
+
+                <p className="text-xs sm:text-sm text-[#91B9C5]/85 leading-relaxed font-sans line-clamp-2 max-w-2xl pt-0.5">
+                  {displayedUser?.bio || 'Curating timeless records on SAY.'}
+                </p>
               </div>
             </div>
 
-            {/* Display Name (top), Username (middle), Bio (bottom) */}
-            <div className="min-w-0 flex-1 space-y-1">
-              <h1 className="text-xl sm:text-2xl font-serif font-bold text-[#E8EEF0] tracking-wide truncate leading-tight">
-                {user?.displayName || 'Audiophile'}
-              </h1>
-              
-              <p className="text-xs font-mono text-cyan-300/80 leading-none">
-                @{user?.username || 'listener'}
-              </p>
-
-              <p className="text-xs sm:text-sm text-[#91B9C5]/85 leading-relaxed font-sans line-clamp-2 max-w-2xl pt-0.5">
-                {user?.bio || 'Curating timeless records on SAY.'}
-              </p>
+            {/* Right: Action Button */}
+            <div className="shrink-0">
+              {isOwnProfile ? (
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0e2a44] hover:bg-[#163a5d] text-xs font-bold text-[#E8EEF0] border border-[#1e486e] hover:border-cyan-400/50 shadow transition-all cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5 text-cyan-300" />
+                  <span>Edit Profile</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {friendshipStatus === 'CONNECTED' ? (
+                    <>
+                      <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-950/60 text-cyan-300 border border-cyan-500/40 text-xs font-bold font-mono">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        <span>Connected</span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={friendshipActionPending}
+                        onClick={handleRemoveFriend}
+                        className="p-2 rounded-xl hover:bg-rose-950/40 text-[#91B9C5]/60 hover:text-rose-400 transition-colors cursor-pointer border border-[#1c4163] hover:border-rose-500/30"
+                        title="Unfriend"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : friendshipStatus === 'PENDING_OUTGOING' ? (
+                    <>
+                      <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#12293d] text-[#91B9C5] border border-[#1f486d] text-xs font-bold font-mono">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>Pending</span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={friendshipActionPending}
+                        onClick={handleCancelOrRejectFriendRequest}
+                        className="p-2 rounded-xl hover:bg-rose-950/40 text-[#91B9C5]/60 hover:text-rose-400 transition-colors cursor-pointer border border-[#1c4163] hover:border-rose-500/30"
+                        title="Cancel Request"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : friendshipStatus === 'PENDING_INCOMING' ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={friendshipActionPending}
+                        onClick={handleAcceptFriendRequest}
+                        className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-[#07131e] text-xs font-bold transition-colors cursor-pointer shadow"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Accept</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={friendshipActionPending}
+                        onClick={handleCancelOrRejectFriendRequest}
+                        className="p-2 rounded-xl hover:bg-[#142e47] text-[#91B9C5] hover:text-rose-300 transition-colors cursor-pointer border border-[#1c4163]"
+                        title="Decline"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={friendshipActionPending}
+                      onClick={handleSendFriendRequest}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#07131e] text-xs font-bold transition-all shadow cursor-pointer"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>Add Friend</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
 
-          {/* Right: Action Button */}
-          <div className="shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsEditModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0e2a44] hover:bg-[#163a5d] text-xs font-bold text-[#E8EEF0] border border-[#1e486e] hover:border-cyan-400/50 shadow transition-all cursor-pointer"
-            >
-              <Edit3 className="w-3.5 h-3.5 text-cyan-300" />
-              <span>Edit Profile</span>
-            </button>
           </div>
-
         </div>
       </section>
 
@@ -379,22 +701,28 @@ export default function Profile() {
                 : 'No Published Notes Yet'}
             </h3>
             <p className="text-xs text-[#91B9C5]/70 max-w-sm">
-              {visibilityFilter === 'FRIENDS_ONLY'
-                ? 'You have not published any notes with Friends-only visibility.'
-                : visibilityFilter === 'PUBLIC'
-                ? 'You have not published any notes with Public visibility.'
-                : 'Share your sonic soul by creating your first music note.'}
+              {isOwnProfile ? (
+                visibilityFilter === 'FRIENDS_ONLY'
+                  ? 'You have not published any notes with Friends-only visibility.'
+                  : visibilityFilter === 'PUBLIC'
+                  ? 'You have not published any notes with Public visibility.'
+                  : 'Share your sonic soul by creating your first music note.'
+              ) : (
+                'This listener has not published any notes matching this filter.'
+              )}
             </p>
-            <button
-              type="button"
-              onClick={() => setStudioOpen(true)}
-              className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#071523] text-xs font-bold transition-all shadow-md cursor-pointer"
-            >
-              Create Note
-            </button>
+            {isOwnProfile && (
+              <button
+                type="button"
+                onClick={() => setStudioOpen(true)}
+                className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#071523] text-xs font-bold transition-all shadow-md cursor-pointer"
+              >
+                Create Note
+              </button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 justify-items-center">
+          <div className="flex flex-col items-center gap-6 w-full max-w-xl mx-auto">
             {filteredNotes.map((note) => (
               <MusicNoteCard
                 key={note.id}
@@ -409,7 +737,7 @@ export default function Profile() {
       </section>
 
       {/* 3. EDIT PROFILE MODAL */}
-      {isEditModalOpen && (
+      {isOwnProfile && isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
           <div className="relative w-full max-w-md rounded-3xl bg-[#091e30] border border-[#1b4366] p-6 shadow-2xl space-y-4">
             
@@ -565,7 +893,7 @@ export default function Profile() {
       )}
 
       {/* 4. DELETE ACCOUNT CONFIRMATION MODAL */}
-      {isDeleteModalOpen && (
+      {isOwnProfile && isDeleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="w-full max-w-md rounded-3xl bg-[#091a2b] border border-rose-500/40 p-6 shadow-2xl space-y-4">
             <div className="w-12 h-12 rounded-2xl bg-rose-950/60 border border-rose-500/40 flex items-center justify-center text-rose-400 mx-auto">

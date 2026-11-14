@@ -10,6 +10,8 @@ public interface IUserService {
 
     CompletableFuture<UserProfileResponse> getUserById(UUID userId);
 
+    CompletableFuture<UserProfileResponse> getUserByUsername(String username);
+
     CompletableFuture<UserProfileResponse> updateUserProfile(UUID userId, UserProfileResponse request);
 
     CompletableFuture<UserProfileResponse> getUserByEmail(String email);

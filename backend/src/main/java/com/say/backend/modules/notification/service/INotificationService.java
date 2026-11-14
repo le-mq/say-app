@@ -19,5 +19,17 @@ public interface INotificationService {
 
     CompletableFuture<Void> markAsRead(UUID notificationId, UUID recipientId);
 
+    CompletableFuture<Void> markAsUnread(UUID notificationId, UUID recipientId);
+
     CompletableFuture<Void> markAllAsRead(UUID recipientId);
+
+    CompletableFuture<Void> deleteNotification(UUID notificationId, UUID recipientId);
+
+    void dispatchSilentEvent(UUID recipientId, String eventType, Object payload);
+
+    void broadcastSilentEvent(String eventType, Object payload);
+
+    int getActiveConnectionsCount();
+
+    int getActiveUsersCount();
 }

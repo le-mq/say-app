@@ -8,7 +8,8 @@ import { calculateCurrentStreak } from '../utils/streakUtils';
 import { toast } from 'react-toastify';
 import { 
   Compass, Users, User, Flame, Sparkles, Disc, Plus, 
-  LogOut, ChevronDown, Clock, Radio, UserCheck, Settings, Bell, Shield, Check, X
+  LogOut, ChevronDown, Clock, Radio, UserCheck, Settings, Bell, Shield, Check, X,
+  UserPlus, Heart, MessageSquare, Music, Trash2, EyeOff, ExternalLink
 } from 'lucide-react';
 
 export default function Navbar() {
@@ -19,6 +20,7 @@ export default function Navbar() {
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
+  const [selectedNotif, setSelectedNotif] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
   const [liveStreak, setLiveStreak] = useState(user?.streakDays ?? 0);
@@ -65,14 +67,53 @@ export default function Navbar() {
       eventSource.addEventListener('NOTIFICATION', (e) => {
         try {
           const notif = JSON.parse(e.data);
+
+          // Polite handling: do not show impolite rejection toast or notification bell entry
+          if (notif.type === 'FRIEND_REJECTED') {
+            window.dispatchEvent(new CustomEvent('say_friendship_updated', { detail: notif }));
+            return;
+          }
+
           setNotifications((prev) => [notif, ...prev.filter(n => n.id !== notif.id)]);
           setUnreadNotifCount((prev) => prev + 1);
-          toast.info(`🔔 ${notif.message}`, {
-            icon: '🎵',
-            autoClose: 5000,
+          
+          toast.info(notif.message, {
+            toastId: `sse-${notif.id || notif.type}`,
+            autoClose: 3500,
           });
+
+          // Dispatch real-time events across views
+          window.dispatchEvent(new CustomEvent('say_notification_received', { detail: notif }));
+          if (notif.type === 'FRIEND_ACCEPTED' || notif.type === 'FRIEND_REQUEST' || notif.type?.startsWith('FRIEND_')) {
+            window.dispatchEvent(new CustomEvent('say_friendship_updated', { detail: notif }));
+          }
+          if (notif.type === 'NOTE_LIKE' && notif.referenceId) {
+            window.dispatchEvent(new CustomEvent('say_note_liked', { detail: { noteId: notif.referenceId } }));
+          }
         } catch (err) {
           console.warn('Error parsing incoming SSE alert:', err);
+        }
+      });
+
+      eventSource.addEventListener('FRIEND_SYNC', (e) => {
+        try {
+          const payload = e.data ? JSON.parse(e.data) : {};
+          window.dispatchEvent(new CustomEvent('say_friendship_updated', { detail: payload }));
+        } catch (err) {
+          window.dispatchEvent(new CustomEvent('say_friendship_updated'));
+        }
+      });
+
+      eventSource.addEventListener('NOTE_SYNC', (e) => {
+        try {
+          const payload = e.data ? JSON.parse(e.data) : {};
+          if (payload.noteId) {
+            window.dispatchEvent(new CustomEvent('say_note_synced', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('say_note_liked', { detail: payload }));
+            window.dispatchEvent(new CustomEvent('say_note_saved', { detail: payload }));
+          }
+        } catch (err) {
+          console.warn('Error parsing incoming NOTE_SYNC:', err);
         }
       });
 
@@ -181,6 +222,132 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const getNotificationMeta = (type) => {
+    switch (type) {
+      case 'FRIEND_REQUEST':
+        return {
+          icon: UserPlus,
+          color: 'text-cyan-400',
+          bg: 'bg-cyan-950/80 border-cyan-500/40',
+          label: 'Friend Request',
+          actionLabel: 'View in Friendship Hub',
+          path: '/friends?tab=hub',
+        };
+      case 'FRIEND_ACCEPTED':
+        return {
+          icon: UserCheck,
+          color: 'text-emerald-400',
+          bg: 'bg-emerald-950/80 border-emerald-500/40',
+          label: 'Friend Connected',
+          actionLabel: 'Go to Friends Stream',
+          path: '/friends?tab=feed',
+        };
+      case 'FRIEND_REJECTED':
+      case 'FRIEND_REMOVED':
+        return {
+          icon: UserCheck,
+          color: 'text-[#91B9C5]',
+          bg: 'bg-[#0f2438] border-[#1e4566]',
+          label: 'Friendship Update',
+          actionLabel: 'Open Friendship Hub',
+          path: '/friends?tab=hub',
+        };
+      case 'NOTE_REPLY':
+      case 'REPLY':
+        return {
+          icon: MessageSquare,
+          color: 'text-sky-400',
+          bg: 'bg-sky-950/80 border-sky-500/40',
+          label: 'Note Reply',
+          actionLabel: 'Listen in Feed',
+          path: '/feed',
+        };
+      case 'NOTE_LIKE':
+      case 'REACTION':
+        return {
+          icon: Heart,
+          color: 'text-rose-400',
+          bg: 'bg-rose-950/80 border-rose-500/40',
+          label: 'Reaction',
+          actionLabel: 'View Note',
+          path: '/feed',
+        };
+      case 'NOTE_CREATED':
+      case 'MUSIC':
+        return {
+          icon: Music,
+          color: 'text-amber-400',
+          bg: 'bg-amber-950/80 border-amber-500/40',
+          label: 'New Track',
+          actionLabel: 'Listen Now',
+          path: '/feed',
+        };
+      default:
+        return {
+          icon: Bell,
+          color: 'text-cyan-300',
+          bg: 'bg-[#0f2438] border-[#1e4566]',
+          label: 'Notification',
+          actionLabel: 'Open SAY',
+          path: '/feed',
+        };
+    }
+  };
+
+  const handleMarkAsRead = async (notifId) => {
+    try {
+      await notificationService.markAsRead(notifId, user.id);
+      setNotifications(prev => prev.map(item => item.id === notifId ? { ...item, read: true } : item));
+      setUnreadNotifCount(prev => Math.max(0, prev - 1));
+    } catch (e) {
+      console.warn('Error marking notification as read:', e);
+    }
+  };
+
+  const handleMarkAsUnread = async (notifId) => {
+    try {
+      await notificationService.markAsUnread(notifId, user.id);
+      setNotifications(prev => prev.map(item => item.id === notifId ? { ...item, read: false } : item));
+      setUnreadNotifCount(prev => prev + 1);
+    } catch (e) {
+      console.warn('Error marking notification as unread:', e);
+    }
+  };
+
+  const handleDeleteNotif = async (notifId) => {
+    try {
+      const target = notifications.find(item => item.id === notifId);
+      await notificationService.deleteNotification(notifId, user.id);
+      setNotifications(prev => prev.filter(item => item.id !== notifId));
+      if (target && !target.read) {
+        setUnreadNotifCount(prev => Math.max(0, prev - 1));
+      }
+      if (selectedNotif?.id === notifId) {
+        setSelectedNotif(null);
+      }
+      toast.success('Notification deleted');
+    } catch (e) {
+      console.warn('Error deleting notification:', e);
+      toast.error('Could not delete notification');
+    }
+  };
+
+  const handleOpenNotif = (notif) => {
+    if (!notif.read) {
+      handleMarkAsRead(notif.id);
+    }
+    setSelectedNotif(notif);
+    setIsNotifMenuOpen(false);
+  };
+
+  const handleNotifAction = (notif) => {
+    const meta = getNotificationMeta(notif.type);
+    setSelectedNotif(null);
+    if (meta.path) {
+      navigate(meta.path);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -450,54 +617,98 @@ export default function Navbar() {
                     )}
                   </div>
 
-                  <div className="max-h-[360px] overflow-y-auto divide-y divide-[#142e44]/60 px-1 py-1">
+                  <div className="max-h-[380px] overflow-y-auto p-2.5 sm:p-3 flex flex-col gap-2.5">
                     {notifications.length === 0 ? (
-                      <div className="py-8 text-center text-xs font-mono text-[#91B9C5]/60">
-                        No notifications yet.
+                      <div className="py-10 text-center text-xs font-mono text-[#91B9C5]/60 flex flex-col items-center justify-center gap-2">
+                        <Bell className="w-6 h-6 text-[#91B9C5]/30 stroke-[1.5]" />
+                        <span>No notifications yet.</span>
                       </div>
                     ) : (
-                      notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          className={`p-3 rounded-xl transition-colors flex items-start gap-3 ${
-                            n.read ? 'hover:bg-[#0c1f2e]/60 opacity-80' : 'bg-[#0c2438]/40 hover:bg-[#0c2438]/80'
-                          }`}
-                        >
-                          <div className="w-8 h-8 rounded-full overflow-hidden bg-[#102434] border border-[#1e4566] shrink-0 flex items-center justify-center text-[10px] font-bold text-cyan-300">
-                            {n.senderAvatarUrl ? (
-                              <img src={n.senderAvatarUrl} alt={n.senderDisplayName || 'User'} className="w-full h-full object-cover" />
-                            ) : (
-                              <span>{(n.senderDisplayName || 'S').slice(0, 2).toUpperCase()}</span>
+                      notifications.map((n) => {
+                        const meta = getNotificationMeta(n.type);
+                        const IconComponent = meta.icon;
+                        return (
+                          <div
+                            key={n.id}
+                            onClick={() => handleOpenNotif(n)}
+                            className={`group relative p-3 sm:p-3.5 rounded-2xl transition-all cursor-pointer flex items-start gap-3 select-none ${
+                              n.read 
+                                ? 'bg-[#081929]/70 hover:bg-[#0d2338] border border-[#15344f]/60 opacity-80 hover:opacity-100' 
+                                : 'bg-[#0b2238] hover:bg-[#0e2c49] border border-cyan-500/35 shadow-md shadow-cyan-950/20'
+                            }`}
+                            title="Click to view details"
+                          >
+                            {/* Unread Glowing Dot */}
+                            {!n.read && (
+                              <span className="absolute left-1.5 top-3.5 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                             )}
+
+                            {/* Avatar with Type Icon Badge */}
+                            <div className="relative shrink-0">
+                              <div className="w-9 h-9 rounded-full overflow-hidden bg-[#102434] border border-[#1e4566] flex items-center justify-center text-[10px] font-bold text-cyan-300">
+                                {n.senderAvatarUrl ? (
+                                  <img src={n.senderAvatarUrl} alt={n.senderDisplayName || 'User'} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span>{(n.senderDisplayName || 'S').slice(0, 2).toUpperCase()}</span>
+                                )}
+                              </div>
+                              <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center border border-[#091827] shadow-sm ${meta.bg}`}>
+                                <IconComponent className={`w-2.5 h-2.5 ${meta.color}`} />
+                              </div>
+                            </div>
+
+                            {/* Text preview */}
+                            <div className="min-w-0 flex-1 pr-1">
+                              <div className="flex items-center justify-between gap-1.5 mb-1">
+                                <span className="text-[10px] font-mono text-cyan-400 font-semibold uppercase tracking-wider">
+                                  {meta.label}
+                                </span>
+                                <span className="text-[9px] font-mono text-[#91B9C5]/50 shrink-0">
+                                  {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-[#E8EEF0] leading-snug line-clamp-2 group-hover:text-white transition-colors">
+                                {n.message}
+                              </p>
+                            </div>
+
+                            {/* Row Action Buttons: Read/Unread & Delete */}
+                            <div className="flex items-center gap-1 shrink-0 self-center pl-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (n.read) {
+                                    handleMarkAsUnread(n.id);
+                                  } else {
+                                    handleMarkAsRead(n.id);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                                  n.read 
+                                    ? 'text-[#91B9C5]/40 hover:text-cyan-300 hover:bg-[#13304d]' 
+                                    : 'text-cyan-400 hover:text-cyan-200 hover:bg-cyan-950/60'
+                                }`}
+                                title={n.read ? "Mark as unread" : "Mark as read"}
+                              >
+                                {n.read ? <EyeOff className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteNotif(n.id);
+                                }}
+                                className="p-1.5 rounded-xl text-[#91B9C5]/40 hover:text-rose-400 hover:bg-rose-950/40 transition-colors cursor-pointer"
+                                title="Delete notification"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs text-[#E8EEF0] leading-snug">
-                              {n.message}
-                            </p>
-                            <span className="text-[10px] font-mono text-[#91B9C5]/60 mt-1 block">
-                              {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
-                            </span>
-                          </div>
-                          {!n.read && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try {
-                                  await notificationService.markAsRead(n.id, user.id);
-                                  setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, read: true } : item));
-                                  setUnreadNotifCount(prev => Math.max(0, prev - 1));
-                                } catch (e) {
-                                  console.warn(e);
-                                }
-                              }}
-                              className="p-1 text-[#91B9C5]/50 hover:text-cyan-300 transition-colors"
-                              title="Mark as read"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -649,6 +860,122 @@ export default function Navbar() {
         </div>
 
       </div>
+
+      {/* 4. NOTIFICATION DETAIL MODAL (Opens when clicking any notification) */}
+      {selectedNotif && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 pt-20 sm:pt-24 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setSelectedNotif(null)}
+        >
+          <div 
+            className="relative w-full max-w-md max-h-[85vh] overflow-y-auto bg-[#091a2b] border border-[#1b4366] rounded-3xl shadow-[0_25px_60px_rgba(0,0,0,0.85)] p-5 sm:p-6 space-y-4 animate-in zoom-in-95 duration-200 my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-[#14324f] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${getNotificationMeta(selectedNotif.type).bg}`}>
+                  {React.createElement(getNotificationMeta(selectedNotif.type).icon, {
+                    className: `w-4 h-4 ${getNotificationMeta(selectedNotif.type).color}`
+                  })}
+                </div>
+                <div>
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-300">
+                    {getNotificationMeta(selectedNotif.type).label}
+                  </h3>
+                  <p className="text-[11px] font-mono text-[#91B9C5]/60">
+                    {selectedNotif.createdAt ? new Date(selectedNotif.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Just now'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedNotif(null)}
+                className="p-1.5 rounded-full hover:bg-[#122e47] text-[#91B9C5]/70 hover:text-white transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sender Profile Snippet */}
+            {selectedNotif.senderDisplayName && (
+              <div 
+                onClick={() => {
+                  const targetUserIdentifier = selectedNotif.senderUsername || selectedNotif.senderId;
+                  if (targetUserIdentifier) {
+                    setSelectedNotif(null);
+                    navigate(selectedNotif.senderId === user?.id ? '/profile' : `/profile/${encodeURIComponent(targetUserIdentifier)}`);
+                  }
+                }}
+                className="flex items-center gap-3 p-3 rounded-2xl bg-[#0c2236]/70 border border-[#183d5e] cursor-pointer hover:border-cyan-500/40 transition-colors"
+                title="View profile"
+              >
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-[#102434] border border-[#204d73] shrink-0 flex items-center justify-center text-xs font-bold text-cyan-300">
+                  {selectedNotif.senderAvatarUrl ? (
+                    <img src={selectedNotif.senderAvatarUrl} alt={selectedNotif.senderDisplayName} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{(selectedNotif.senderDisplayName || 'S').slice(0, 2).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h5 className="text-xs font-bold text-[#E8EEF0] truncate hover:text-cyan-300 transition-colors">
+                    {selectedNotif.senderDisplayName}
+                  </h5>
+                  <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
+                    @{selectedNotif.senderUsername || 'listener'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Message Body */}
+            <div className="p-4 rounded-2xl bg-[#071625] border border-[#14324f] text-sm text-[#E8EEF0] leading-relaxed select-text">
+              {selectedNotif.message}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleDeleteNotif(selectedNotif.id)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 hover:text-rose-100 text-xs font-mono transition-colors cursor-pointer"
+                title="Delete this notification"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>Delete</span>
+              </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedNotif.read) {
+                      handleMarkAsUnread(selectedNotif.id);
+                      setSelectedNotif(prev => ({ ...prev, read: false }));
+                    } else {
+                      handleMarkAsRead(selectedNotif.id);
+                      setSelectedNotif(prev => ({ ...prev, read: true }));
+                    }
+                  }}
+                  className="px-3 py-2 rounded-xl bg-[#0e273d] hover:bg-[#163a59] text-xs font-mono text-[#91B9C5] hover:text-white border border-[#1b4366] transition-colors cursor-pointer"
+                >
+                  {selectedNotif.read ? 'Mark as Unread' : 'Mark as Read'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleNotifAction(selectedNotif)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-[#071523] text-xs font-bold transition-all shadow-md cursor-pointer active:scale-95"
+                >
+                  <span>{getNotificationMeta(selectedNotif.type).actionLabel}</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

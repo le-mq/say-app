@@ -38,8 +38,10 @@ public class NoteController {
     }
 
     @GetMapping("/feed/public")
-    public CompletableFuture<ResponseEntity<ApiResponse<List<NoteResponseDto>>>> getPublicFeed() {
-        return noteService.getPublicFeed()
+    public CompletableFuture<ResponseEntity<ApiResponse<List<NoteResponseDto>>>> getPublicFeed(
+            @RequestParam(required = false) UUID viewerId
+    ) {
+        return noteService.getPublicFeed(viewerId)
                 .thenApply(notes -> ResponseEntity.ok(ApiResponse.success("Public feed retrieved successfully", notes)));
     }
 
@@ -53,10 +55,29 @@ public class NoteController {
 
     @GetMapping("/user/{userId}")
     public CompletableFuture<ResponseEntity<ApiResponse<List<NoteResponseDto>>>> getUserNotes(
-            @PathVariable UUID userId
+            @PathVariable UUID userId,
+            @RequestParam(required = false) UUID viewerId
     ) {
-        return noteService.getUserNotes(userId)
+        return noteService.getUserNotes(userId, viewerId)
                 .thenApply(notes -> ResponseEntity.ok(ApiResponse.success("User notes retrieved successfully", notes)));
+    }
+
+    @PostMapping("/{noteId}/like")
+    public CompletableFuture<ResponseEntity<ApiResponse<NoteResponseDto>>> toggleLikeNote(
+            @PathVariable UUID noteId,
+            @RequestParam UUID userId
+    ) {
+        return noteService.toggleLikeNote(noteId, userId)
+                .thenApply(note -> ResponseEntity.ok(ApiResponse.success("Note liked successfully", note)));
+    }
+
+    @PostMapping("/{noteId}/save")
+    public CompletableFuture<ResponseEntity<ApiResponse<NoteResponseDto>>> toggleSaveNote(
+            @PathVariable UUID noteId,
+            @RequestParam UUID userId
+    ) {
+        return noteService.toggleSaveNote(noteId, userId)
+                .thenApply(note -> ResponseEntity.ok(ApiResponse.success("Note saved successfully", note)));
     }
 
     @PutMapping("/{noteId}")

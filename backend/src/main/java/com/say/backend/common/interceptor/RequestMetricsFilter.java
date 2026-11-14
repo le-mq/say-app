@@ -11,6 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -19,7 +20,17 @@ public class RequestMetricsFilter extends OncePerRequestFilter {
 
     private final AtomicLong totalRequests = new AtomicLong(0);
     private final AtomicLong errorRequests = new AtomicLong(0);
+    private final AtomicBoolean maintenanceMode = new AtomicBoolean(false);
     private final Map<String, AtomicLong> endpointCounters = new ConcurrentHashMap<>();
+
+    public void setMaintenanceMode(boolean active) {
+        this.maintenanceMode.set(active);
+        log.info("System maintenance mode set to: {}", active);
+    }
+
+    public boolean isMaintenanceMode() {
+        return this.maintenanceMode.get();
+    }
 
     @Override
     protected void doFilterInternal(
@@ -35,6 +46,17 @@ public class RequestMetricsFilter extends OncePerRequestFilter {
         }
 
         totalRequests.incrementAndGet();
+
+        // Enforce Maintenance Mode: allow admin and auth endpoints to continue operating
+        if (maintenanceMode.get()) {
+            boolean isExempt = uri.contains("/api/v1/admin") || uri.contains("/api/v1/auth");
+            if (!isExempt) {
+                response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"status\":503,\"message\":\"Hệ thống đang bảo trì theo kế hoạch. Vui lòng quay lại sau ít phút.\",\"data\":null}");
+                return;
+            }
+        }
 
         String cleanEndpoint = normalizeEndpoint(uri);
         endpointCounters.computeIfAbsent(cleanEndpoint, k -> new AtomicLong(0)).incrementAndGet();

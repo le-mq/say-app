@@ -7,6 +7,10 @@ export const authService = {
   getProfile: async (userId) => {
     return api.get(`/users/${userId}`);
   },
+  getUserByUsername: async (username) => {
+    const clean = String(username).replace(/^@/, '').trim();
+    return api.get(`/users/username/${encodeURIComponent(clean)}`);
+  },
   updateProfile: async (userId, data) => {
     return api.put(`/users/${userId}`, data);
   },

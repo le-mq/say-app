@@ -21,6 +21,16 @@ export const notificationService = {
     return api.put(`/notifications/${notificationId}/read?userId=${userId}`, {});
   },
 
+  // Mark single alert as unread
+  markAsUnread: async (notificationId, userId) => {
+    return api.put(`/notifications/${notificationId}/unread?userId=${userId}`, {});
+  },
+
+  // Delete single notification
+  deleteNotification: async (notificationId, userId) => {
+    return api.delete(`/notifications/${notificationId}?userId=${userId}`);
+  },
+
   // Mark all as read
   markAllAsRead: async (userId) => {
     return api.put(`/notifications/read-all/${userId}`, {});

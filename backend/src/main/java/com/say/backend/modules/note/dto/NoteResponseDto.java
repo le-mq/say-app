@@ -29,5 +29,9 @@ public class NoteResponseDto {
     private String emotionTag;
     private String stickerBadge;
     private String visibility;
+    private Integer likesCount;
+    private Integer savesCount;
+    private Boolean isLiked;
+    private Boolean isSaved;
     private Instant createdAt;
 }

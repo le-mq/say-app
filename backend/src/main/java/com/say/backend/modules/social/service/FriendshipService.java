@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -46,6 +47,7 @@ public class FriendshipService implements IFriendshipService {
                     .orElseThrow(() -> new ResourceNotFoundException("Addressee not found with id: " + addresseeId));
 
             Optional<Friendship> existing = friendshipRepository.findFriendshipBetween(requesterId, addresseeId);
+            Friendship saved;
             if (existing.isPresent()) {
                 Friendship f = existing.get();
                 if ("ACCEPTED".equals(f.getStatus())) {
@@ -57,17 +59,15 @@ public class FriendshipService implements IFriendshipService {
                 f.setRequester(requester);
                 f.setAddressee(addressee);
                 f.setStatus("PENDING");
-                Friendship updated = friendshipRepository.save(f);
-                return CompletableFuture.completedFuture(mapToResponseDto(updated));
+                saved = friendshipRepository.save(f);
+            } else {
+                Friendship friendship = Friendship.builder()
+                        .requester(requester)
+                        .addressee(addressee)
+                        .status("PENDING")
+                        .build();
+                saved = friendshipRepository.save(friendship);
             }
-
-            Friendship friendship = Friendship.builder()
-                    .requester(requester)
-                    .addressee(addressee)
-                    .status("PENDING")
-                    .build();
-
-            Friendship saved = friendshipRepository.save(friendship);
             
             // Notify addressee that someone sent a friendship invitation
             try {
@@ -142,6 +142,18 @@ public class FriendshipService implements IFriendshipService {
 
             friendship.setStatus("REJECTED");
             Friendship saved = friendshipRepository.save(friendship);
+
+            // Silently dispatch real-time UI update event without sending an impolite toast/notification to requester
+            try {
+                notificationService.dispatchSilentEvent(
+                        friendship.getRequester().getId(),
+                        "FRIEND_SYNC",
+                        Map.of("type", "FRIEND_REJECTED", "friendshipId", saved.getId().toString())
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch silent friend rejected event: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
@@ -220,8 +232,26 @@ public class FriendshipService implements IFriendshipService {
                 throw new BadRequestException("Unauthorized to remove this friendship");
             }
 
+            UUID otherUserId = friendship.getRequester().getId().equals(currentUserId)
+                    ? friendship.getAddressee().getId()
+                    : friendship.getRequester().getId();
+
             friendshipRepository.delete(friendship);
             log.info("Friendship {} successfully removed by user {}", friendshipId, currentUserId);
+
+            // Notify the other user of connection update
+            try {
+                notificationService.sendNotification(
+                        otherUserId,
+                        currentUserId,
+                        "FRIEND_REMOVED",
+                        "Friendship connection was updated.",
+                        friendshipId
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend removed notification: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(null);
         } catch (AppException e) {
             throw e;

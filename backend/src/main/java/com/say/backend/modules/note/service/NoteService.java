@@ -3,12 +3,14 @@ package com.say.backend.modules.note.service;
 import com.say.backend.common.exception.AppException;
 import com.say.backend.common.exception.BadRequestException;
 import com.say.backend.common.exception.ResourceNotFoundException;
+import com.say.backend.modules.admin.repository.IAppConfigRepository;
 import com.say.backend.modules.auth.entity.User;
 import com.say.backend.modules.auth.repository.IUserRepository;
 import com.say.backend.modules.note.dto.CreateNoteRequest;
 import com.say.backend.modules.note.dto.NoteResponseDto;
 import com.say.backend.modules.note.entity.Note;
 import com.say.backend.modules.note.repository.INoteRepository;
+import com.say.backend.modules.notification.service.INotificationService;
 import com.say.backend.modules.social.repository.IFriendshipRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +32,8 @@ public class NoteService implements INoteService {
     private final INoteRepository noteRepository;
     private final IUserRepository userRepository;
     private final IFriendshipRepository friendshipRepository;
+    private final INotificationService notificationService;
+    private final IAppConfigRepository appConfigRepository;
 
     @Override
     @Async("taskExecutor")
@@ -50,6 +54,17 @@ public class NoteService implements INoteService {
             }
             if (request.getExternalSongUrl() == null || request.getExternalSongUrl().isBlank()) {
                 throw new BadRequestException("External song URL is required");
+            }
+
+            // Enforce dynamic system max caption length
+            int maxCaptionLength = appConfigRepository.findById("MAX_CAPTION_LENGTH")
+                    .map(c -> {
+                        try { return Integer.parseInt(c.getConfigValue().trim()); } catch (Exception ignored) { return 150; }
+                    })
+                    .orElse(150);
+
+            if (request.getCaption() != null && request.getCaption().length() > maxCaptionLength) {
+                throw new BadRequestException("Nội dung cảm nghĩ vượt quá độ dài tối đa (" + maxCaptionLength + " ký tự)");
             }
 
             String rawTemplate = request.getTemplateType();
@@ -139,9 +154,16 @@ public class NoteService implements INoteService {
     @Async("taskExecutor")
     @Transactional(readOnly = true)
     public CompletableFuture<List<NoteResponseDto>> getPublicFeed() {
+        return getPublicFeed(null);
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional(readOnly = true)
+    public CompletableFuture<List<NoteResponseDto>> getPublicFeed(UUID viewerId) {
         try {
             List<Note> notes = noteRepository.findByVisibilityOrderByCreatedAtDesc("PUBLIC");
-            List<NoteResponseDto> dtos = notes.stream().map(this::mapToResponseDto).toList();
+            List<NoteResponseDto> dtos = notes.stream().map(n -> mapToResponseDto(n, viewerId)).toList();
             return CompletableFuture.completedFuture(dtos);
         } catch (AppException e) {
             throw e;
@@ -168,7 +190,7 @@ public class NoteService implements INoteService {
                 feedNotes = noteRepository.findFeedNotes(currentUserId, friendIds);
             }
 
-            List<NoteResponseDto> dtos = feedNotes.stream().map(this::mapToResponseDto).toList();
+            List<NoteResponseDto> dtos = feedNotes.stream().map(n -> mapToResponseDto(n, currentUserId)).toList();
             return CompletableFuture.completedFuture(dtos);
         } catch (AppException e) {
             throw e;
@@ -182,18 +204,169 @@ public class NoteService implements INoteService {
     @Async("taskExecutor")
     @Transactional(readOnly = true)
     public CompletableFuture<List<NoteResponseDto>> getUserNotes(UUID userId) {
+        return getUserNotes(userId, null);
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional(readOnly = true)
+    public CompletableFuture<List<NoteResponseDto>> getUserNotes(UUID userId, UUID viewerId) {
         try {
             if (!userRepository.existsById(userId)) {
                 throw new ResourceNotFoundException("User not found with id: " + userId);
             }
             List<Note> notes = noteRepository.findByUserIdOrderByCreatedAtDesc(userId);
-            List<NoteResponseDto> dtos = notes.stream().map(this::mapToResponseDto).toList();
+
+            boolean isSelf = viewerId != null && viewerId.equals(userId);
+            boolean isAcceptedFriend = false;
+            if (!isSelf && viewerId != null) {
+                isAcceptedFriend = friendshipRepository.findFriendshipBetween(userId, viewerId)
+                        .filter(f -> "ACCEPTED".equalsIgnoreCase(f.getStatus()))
+                        .isPresent();
+            }
+
+            final boolean canViewFriendsOnly = isSelf || isAcceptedFriend;
+            List<NoteResponseDto> dtos = notes.stream()
+                    .filter(n -> canViewFriendsOnly || "PUBLIC".equalsIgnoreCase(n.getVisibility()))
+                    .map(n -> mapToResponseDto(n, viewerId))
+                    .toList();
+
             return CompletableFuture.completedFuture(dtos);
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
             log.error("Error fetching user notes for user {}: {}", userId, e.getMessage());
             throw new AppException("Failed to fetch user notes: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional
+    public CompletableFuture<NoteResponseDto> toggleLikeNote(UUID noteId, UUID userId) {
+        try {
+            Note note = noteRepository.findById(noteId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Note not found with id: " + noteId));
+            User liker = userRepository.findById(userId)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + userId));
+
+            String uidTag = "," + userId + ",";
+            String likedIds = note.getLikedUserIds() != null ? note.getLikedUserIds() : "";
+            boolean isCurrentlyLiked = likedIds.contains(uidTag);
+            int currentLikes = note.getLikesCount() != null ? note.getLikesCount() : 0;
+            boolean nowLiked;
+
+            if (isCurrentlyLiked) {
+                likedIds = likedIds.replace(uidTag, ",");
+                if (",".equals(likedIds)) likedIds = "";
+                note.setLikedUserIds(likedIds);
+                note.setLikesCount(Math.max(0, currentLikes - 1));
+                nowLiked = false;
+            } else {
+                if (likedIds.isEmpty() || !likedIds.startsWith(",")) {
+                    likedIds = "," + (likedIds.isEmpty() ? "" : likedIds.replaceAll("^,+", ""));
+                }
+                if (!likedIds.endsWith(",")) {
+                    likedIds += ",";
+                }
+                likedIds += userId + ",";
+                note.setLikedUserIds(likedIds);
+                note.setLikesCount(currentLikes + 1);
+                nowLiked = true;
+            }
+            Note saved = noteRepository.save(note);
+
+            // Notify note owner if liked and liker is someone else
+            if (nowLiked && !note.getUser().getId().equals(userId)) {
+                try {
+                    notificationService.sendNotification(
+                            note.getUser().getId(),
+                            userId,
+                            "NOTE_LIKE",
+                            liker.getDisplayName() + " liked your music note \"" + note.getSongTitle() + "\"",
+                            note.getId()
+                    );
+                } catch (Exception ex) {
+                    log.warn("Could not dispatch note like notification: {}", ex.getMessage());
+                }
+            }
+
+            // Real-time broadcast sync across all active clients
+            try {
+                Map<String, Object> syncPayload = Map.of(
+                        "noteId", note.getId().toString(),
+                        "likesCount", saved.getLikesCount(),
+                        "savesCount", saved.getSavesCount()
+                );
+                notificationService.broadcastSilentEvent("NOTE_SYNC", syncPayload);
+            } catch (Exception ex) {
+                log.warn("Could not broadcast note sync event: {}", ex.getMessage());
+            }
+
+            return CompletableFuture.completedFuture(mapToResponseDto(saved, userId));
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error toggling like for note {}: {}", noteId, e.getMessage());
+            throw new AppException("Failed to like note: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Async("taskExecutor")
+    @Transactional
+    public CompletableFuture<NoteResponseDto> toggleSaveNote(UUID noteId, UUID userId) {
+        try {
+            Note note = noteRepository.findById(noteId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Note not found with id: " + noteId));
+            if (!userRepository.existsById(userId)) {
+                throw new ResourceNotFoundException("User not found with id: " + userId);
+            }
+
+            String uidTag = "," + userId + ",";
+            String savedIds = note.getSavedUserIds() != null ? note.getSavedUserIds() : "";
+            boolean isCurrentlySaved = savedIds.contains(uidTag);
+            int currentSaves = note.getSavesCount() != null ? note.getSavesCount() : 0;
+            boolean nowSaved;
+
+            if (isCurrentlySaved) {
+                savedIds = savedIds.replace(uidTag, ",");
+                if (",".equals(savedIds)) savedIds = "";
+                note.setSavedUserIds(savedIds);
+                note.setSavesCount(Math.max(0, currentSaves - 1));
+                nowSaved = false;
+            } else {
+                if (savedIds.isEmpty() || !savedIds.startsWith(",")) {
+                    savedIds = "," + (savedIds.isEmpty() ? "" : savedIds.replaceAll("^,+", ""));
+                }
+                if (!savedIds.endsWith(",")) {
+                    savedIds += ",";
+                }
+                savedIds += userId + ",";
+                note.setSavedUserIds(savedIds);
+                note.setSavesCount(currentSaves + 1);
+                nowSaved = true;
+            }
+            Note saved = noteRepository.save(note);
+
+            // Real-time broadcast sync across all active clients
+            try {
+                Map<String, Object> syncPayload = Map.of(
+                        "noteId", note.getId().toString(),
+                        "likesCount", saved.getLikesCount(),
+                        "savesCount", saved.getSavesCount()
+                );
+                notificationService.broadcastSilentEvent("NOTE_SYNC", syncPayload);
+            } catch (Exception ex) {
+                log.warn("Could not broadcast note sync event: {}", ex.getMessage());
+            }
+
+            return CompletableFuture.completedFuture(mapToResponseDto(saved, userId));
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error toggling save for note {}: {}", noteId, e.getMessage());
+            throw new AppException("Failed to save note: " + e.getMessage());
         }
     }
 
@@ -280,6 +453,17 @@ public class NoteService implements INoteService {
     }
 
     private NoteResponseDto mapToResponseDto(Note note) {
+        return mapToResponseDto(note, null);
+    }
+
+    private NoteResponseDto mapToResponseDto(Note note, UUID viewerId) {
+        boolean isLiked = false;
+        boolean isSaved = false;
+        if (viewerId != null) {
+            String uidTag = "," + viewerId + ",";
+            isLiked = note.getLikedUserIds() != null && note.getLikedUserIds().contains(uidTag);
+            isSaved = note.getSavedUserIds() != null && note.getSavedUserIds().contains(uidTag);
+        }
         return NoteResponseDto.builder()
                 .id(note.getId())
                 .userId(note.getUser().getId())
@@ -297,6 +481,10 @@ public class NoteService implements INoteService {
                 .emotionTag(note.getEmotionTag())
                 .stickerBadge(note.getStickerBadge())
                 .visibility(note.getVisibility())
+                .likesCount(note.getLikesCount() != null ? note.getLikesCount() : 0)
+                .savesCount(note.getSavesCount() != null ? note.getSavesCount() : 0)
+                .isLiked(isLiked)
+                .isSaved(isSaved)
                 .createdAt(note.getCreatedAt())
                 .build();
     }

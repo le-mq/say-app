@@ -55,8 +55,44 @@ CREATE TABLE IF NOT EXISTS notes (
     emotion_tag VARCHAR(50),
     sticker_badge TEXT,
     visibility VARCHAR(20) NOT NULL DEFAULT 'PUBLIC' CHECK (visibility IN ('PUBLIC', 'FRIENDS_ONLY')),
+    likes_count INT DEFAULT 0,
+    saves_count INT DEFAULT 0,
+    liked_user_ids TEXT DEFAULT '',
+    saved_user_ids TEXT DEFAULT '',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Ensure likes_count, saves_count, liked_user_ids, saved_user_ids exist if table was created in an earlier migration
+DO $$ 
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'notes' AND column_name = 'likes_count'
+    ) THEN
+        ALTER TABLE notes ADD COLUMN likes_count INT DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'notes' AND column_name = 'saves_count'
+    ) THEN
+        ALTER TABLE notes ADD COLUMN saves_count INT DEFAULT 0;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'notes' AND column_name = 'liked_user_ids'
+    ) THEN
+        ALTER TABLE notes ADD COLUMN liked_user_ids TEXT DEFAULT '';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'notes' AND column_name = 'saved_user_ids'
+    ) THEN
+        ALTER TABLE notes ADD COLUMN saved_user_ids TEXT DEFAULT '';
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_notes_user_created_at 
     ON notes (user_id, created_at);

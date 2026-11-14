@@ -3,6 +3,7 @@ package com.say.backend.modules.auth.service;
 import com.say.backend.common.exception.AppException;
 import com.say.backend.common.exception.BadRequestException;
 import com.say.backend.common.exception.ResourceNotFoundException;
+import com.say.backend.modules.admin.repository.IAppConfigRepository;
 import com.say.backend.modules.auth.dto.GoogleAuthRequest;
 import com.say.backend.modules.auth.dto.StreakCalendarDto;
 import com.say.backend.modules.auth.dto.StreakDayDto;
@@ -31,6 +32,7 @@ public class AuthService implements IAuthService {
     private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9_.]{3,30}$");
     private final IUserRepository userRepository;
     private final INoteRepository noteRepository;
+    private final IAppConfigRepository appConfigRepository;
 
     @Override
     @Async("taskExecutor")
@@ -115,6 +117,14 @@ public class AuthService implements IAuthService {
                         return userRepository.save(existingUser);
                     })
                     .orElseGet(() -> {
+                        boolean allowRegistration = appConfigRepository.findById("ALLOW_PUBLIC_REGISTRATION")
+                                .map(c -> !"false".equalsIgnoreCase(c.getConfigValue()))
+                                .orElse(true);
+
+                        if (!allowRegistration) {
+                            throw new BadRequestException("Đăng ký tài khoản mới tạm thời đóng bởi Quản trị viên.");
+                        }
+
                         User newUser = User.builder()
                                 .email(request.getEmail())
                                 .displayName(request.getDisplayName() != null ? request.getDisplayName() : "Audiophile")

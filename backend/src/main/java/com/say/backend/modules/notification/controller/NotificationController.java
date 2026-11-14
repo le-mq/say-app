@@ -51,6 +51,24 @@ public class NotificationController {
                 .thenApply(res -> ResponseEntity.ok(ApiResponse.success("Marked as read", null)));
     }
 
+    @PutMapping("/{notificationId}/unread")
+    public CompletableFuture<ResponseEntity<ApiResponse<Void>>> markAsUnread(
+            @PathVariable UUID notificationId,
+            @RequestParam UUID userId
+    ) {
+        return notificationService.markAsUnread(notificationId, userId)
+                .thenApply(res -> ResponseEntity.ok(ApiResponse.success("Marked as unread", null)));
+    }
+
+    @DeleteMapping("/{notificationId}")
+    public CompletableFuture<ResponseEntity<ApiResponse<Void>>> deleteNotification(
+            @PathVariable UUID notificationId,
+            @RequestParam UUID userId
+    ) {
+        return notificationService.deleteNotification(notificationId, userId)
+                .thenApply(res -> ResponseEntity.ok(ApiResponse.success("Notification deleted successfully", null)));
+    }
+
     @PutMapping("/read-all/{userId}")
     public CompletableFuture<ResponseEntity<ApiResponse<Void>>> markAllAsRead(
             @PathVariable UUID userId

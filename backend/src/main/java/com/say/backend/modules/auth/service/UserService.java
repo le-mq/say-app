@@ -48,6 +48,23 @@ public class UserService implements IUserService {
 
     @Override
     @Async("taskExecutor")
+    @Transactional(readOnly = true)
+    public CompletableFuture<UserProfileResponse> getUserByUsername(String username) {
+        try {
+            String clean = username.trim().replaceFirst("^@", "").toLowerCase();
+            User user = userRepository.findByUsername(clean)
+                    .orElseThrow(() -> new ResourceNotFoundException("User not found with username: " + clean));
+            return CompletableFuture.completedFuture(mapToResponse(user));
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Error retrieving user by username {}: {}", username, e.getMessage());
+            throw new AppException("Failed to retrieve user: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Async("taskExecutor")
     @Transactional
     public CompletableFuture<UserProfileResponse> updateUserProfile(UUID userId, UserProfileResponse request) {
         try {

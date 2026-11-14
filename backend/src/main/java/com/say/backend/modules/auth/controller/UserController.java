@@ -26,6 +26,14 @@ public class UserController {
                 .thenApply(response -> ResponseEntity.ok(ApiResponse.success("User fetched successfully", response)));
     }
 
+    @GetMapping("/username/{username}")
+    public CompletableFuture<ResponseEntity<ApiResponse<UserProfileResponse>>> getUserByUsername(
+            @PathVariable String username
+    ) {
+        return userService.getUserByUsername(username)
+                .thenApply(response -> ResponseEntity.ok(ApiResponse.success("User fetched successfully", response)));
+    }
+
     @PutMapping("/{userId}")
     public CompletableFuture<ResponseEntity<ApiResponse<UserProfileResponse>>> updateUserProfile(
             @PathVariable UUID userId,

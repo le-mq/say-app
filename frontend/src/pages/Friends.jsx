@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { usePlayerStore } from '../store/playerStore';
 import { buildPlayableTrack } from '../utils/snippetUtils';
@@ -18,6 +18,7 @@ import { formatTimeDetails } from '../utils/timeFormat';
 export default function Friends() {
   const { user } = useAuthStore();
   const { currentTrack, isPlaying, playTrack, togglePlay } = usePlayerStore();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Sub-tabs synchronized with Navbar / URL search params: 'feed' (Friends Feed) | 'hub' (Friendship Hub)
@@ -43,9 +44,6 @@ export default function Friends() {
 
   // Reply With Song modal state
   const [replyModalNote, setReplyModalNote] = useState(null);
-
-  // View friend profile modal state
-  const [viewingProfileFriend, setViewingProfileFriend] = useState(null);
 
   // 1. Fetch Friends Feed (combining circle feed + user's own friends-only and public notes)
   const loadFriendsFeed = async () => {
@@ -111,8 +109,15 @@ export default function Friends() {
           const data = pendingRes.value;
           const list = Array.isArray(data) ? data : (data?.data?.data || data?.data || []);
           setPendingRequests(list);
+          const outgoingPendingUserIds = new Set(
+            list
+              .filter(r => (r.requesterId || r.requester?.id) === user.id)
+              .map(r => r.addresseeId || r.addressee?.id)
+          );
+          setSentRequestUserIds(outgoingPendingUserIds);
         } else {
           setPendingRequests([]);
+          setSentRequestUserIds(new Set());
         }
         return;
       }
@@ -122,6 +127,7 @@ export default function Friends() {
 
     setFriendsList([]);
     setPendingRequests([]);
+    setSentRequestUserIds(new Set());
   };
 
   useEffect(() => {
@@ -131,48 +137,57 @@ export default function Friends() {
     const handleNoteCreated = () => {
       loadFriendsFeed();
     };
+    const handleFriendshipUpdated = () => {
+      loadFriendshipHub();
+      loadFriendsFeed();
+      if (searchQuery.trim()) {
+        executeSearch(searchQuery.trim());
+      }
+    };
+
     window.addEventListener('say_note_created', handleNoteCreated);
+    window.addEventListener('say_friendship_updated', handleFriendshipUpdated);
+    window.addEventListener('focus', handleFriendshipUpdated);
     return () => {
       window.removeEventListener('say_note_created', handleNoteCreated);
+      window.removeEventListener('say_friendship_updated', handleFriendshipUpdated);
+      window.removeEventListener('focus', handleFriendshipUpdated);
     };
-  }, [user]);
+  }, [user?.id, searchQuery]);
 
-  // Search users in Friendship Hub
+  // Search users in Friendship Hub (with race-condition protection and clean error handling)
+  const searchSeqRef = useRef(0);
   const executeSearch = async (queryText) => {
     const trimmed = queryText.trim();
     if (!trimmed) {
       setSearchResults([]);
       setHasSearched(false);
+      setIsSearching(false);
       return;
     }
 
+    const seq = ++searchSeqRef.current;
     setIsSearching(true);
     setHasSearched(true);
     try {
-      const res = await socialService.searchUsers(trimmed, user?.id);
+      // Search all matching users by name, username or email
+      const res = await socialService.searchUsers(trimmed);
+      if (seq !== searchSeqRef.current) return;
       const users = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
       setSearchResults(users);
     } catch (err) {
-      console.error('Failed to search users:', err);
-      toast.error(err?.response?.data?.message || 'Failed to search users');
+      if (seq !== searchSeqRef.current) return;
+      console.warn('Search users notice:', err);
       setSearchResults([]);
     } finally {
-      setIsSearching(false);
+      if (seq === searchSeqRef.current) {
+        setIsSearching(false);
+      }
     }
   };
 
-  useEffect(() => {
-    if (activeSubTab !== 'hub') return;
-    const trimmed = searchQuery.trim();
-    if (!trimmed) return;
-    const timer = setTimeout(() => {
-      executeSearch(trimmed);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery, activeSubTab, user?.id]);
-
   const handleSearchUsers = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     await executeSearch(searchQuery);
   };
 
@@ -184,17 +199,17 @@ export default function Friends() {
       }
       await socialService.sendFriendRequest(user.id, targetUser.id);
       setSentRequestUserIds(prev => new Set(prev).add(targetUser.id));
-      toast.success(`Friend request sent to ${targetUser.displayName}`);
-      loadFriendshipHub();
+      toast.success(`Friend request sent to ${targetUser.displayName}`, { toastId: `send-${targetUser.id}` });
+      await loadFriendshipHub();
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
     } catch (err) {
       console.error('Failed to send friend request:', err);
       const errMsg = err?.message || err?.response?.data?.message || 'Could not send friend request';
       if (errMsg.toLowerCase().includes('already pending')) {
         setSentRequestUserIds(prev => new Set(prev).add(targetUser.id));
-        toast.info(errMsg);
         loadFriendshipHub();
       } else {
-        toast.error(errMsg);
+        toast.error(errMsg, { toastId: 'send-error' });
       }
     }
   };
@@ -205,12 +220,13 @@ export default function Friends() {
         await socialService.acceptFriendRequest(reqId, user.id);
       }
       setPendingRequests(prev => prev.filter(r => r.id !== reqId));
-      toast.success(`Connected with ${requesterName}!`);
-      loadFriendshipHub();
-      loadFriendsFeed();
+      toast.success(`Connected with ${requesterName}!`, { toastId: `accept-${reqId}` });
+      await Promise.allSettled([loadFriendshipHub(), loadFriendsFeed()]);
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
     } catch (err) {
+      console.warn('Accept request error, syncing locally:', err);
       setPendingRequests(prev => prev.filter(r => r.id !== reqId));
-      toast.success(`Connected with ${requesterName}!`);
+      await loadFriendshipHub();
     }
   };
 
@@ -220,10 +236,12 @@ export default function Friends() {
         await socialService.rejectFriendRequest(reqId, user.id);
       }
       setPendingRequests(prev => prev.filter(r => r.id !== reqId));
-      toast.info('Friend request declined.');
+      toast.info('Friend request declined.', { toastId: `reject-${reqId}` });
+      await loadFriendshipHub();
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
     } catch (err) {
+      console.warn('Reject error:', err);
       setPendingRequests(prev => prev.filter(r => r.id !== reqId));
-      toast.info('Friend request declined.');
     }
   };
 
@@ -240,9 +258,11 @@ export default function Friends() {
           return next;
         });
       }
-      toast.info('Friend request cancelled.');
+      toast.info('Friend request cancelled.', { toastId: `cancel-${reqId}` });
+      await loadFriendshipHub();
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
     } catch (err) {
-      toast.error(err?.message || 'Could not cancel friend request.');
+      toast.error(err?.message || 'Could not cancel friend request.', { toastId: 'cancel-error' });
     }
   };
 
@@ -254,11 +274,12 @@ export default function Friends() {
         await socialService.removeFriend(friendshipId, user.id);
       }
       setFriendsList(prev => prev.filter(f => (f.friendId || f.id) !== friendId));
-      toast.info(`Removed ${name} from friends list.`);
+      toast.info(`Removed ${name} from friends list.`, { toastId: `remove-${friendId}` });
+      await loadFriendshipHub();
+      window.dispatchEvent(new CustomEvent('say_friendship_updated'));
     } catch (err) {
       console.warn('Backend remove friend error, updating locally', err);
       setFriendsList(prev => prev.filter(f => (f.friendId || f.id) !== friendId));
-      toast.info(`Removed ${name} from friends list.`);
     }
   };
 
@@ -274,17 +295,15 @@ export default function Friends() {
     playTrack(track, options);
   };
 
-  // Like note toggle with actual count tracking
+  // Like note toggle (silent UI feedback without spamming toasts)
   const handleLikeNote = (noteId, defaultLikes = 0) => {
     setLikedNoteIds(prev => {
       const next = new Set(prev);
       const isCurrentlyLiked = next.has(noteId);
       if (isCurrentlyLiked) {
         next.delete(noteId);
-        toast.info('Removed like');
       } else {
         next.add(noteId);
-        toast.success('Liked music note!');
       }
       setLikeCounts(counts => {
         const currentCount = counts[noteId] ?? defaultLikes;
@@ -458,6 +477,7 @@ export default function Friends() {
                   </span>
                   <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
                   {searchResults.map((person) => {
+                    const isSelf = person.id === user?.id;
                     const isAlreadyFriend = friendsList.some(f => (f.friendId || f.id) === person.id);
                     const hasSent = sentRequestUserIds.has(person.id) || pendingRequests.some(
                       r => r.requesterId === user?.id && r.addresseeId === person.id
@@ -480,7 +500,14 @@ export default function Friends() {
                         key={person.id}
                         className="p-3 rounded-2xl bg-[#071827] border border-[#153654] flex items-center justify-between gap-3"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div 
+                          onClick={() => {
+                            const target = person.username || (person.handle ? person.handle.replace(/^@/, '') : '') || person.id;
+                            navigate(isSelf ? '/profile' : `/profile/${encodeURIComponent(target)}`);
+                          }}
+                          className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-85 transition-opacity"
+                          title="View Profile"
+                        >
                           {person.avatarUrl ? (
                             <img
                               src={person.avatarUrl}
@@ -493,7 +520,7 @@ export default function Friends() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
+                            <h5 className="text-xs font-bold text-[#E8EEF0] truncate hover:text-cyan-300 transition-colors">
                               {person.displayName}
                             </h5>
                             <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
@@ -502,7 +529,11 @@ export default function Friends() {
                           </div>
                         </div>
 
-                        {isAlreadyFriend ? (
+                        {isSelf ? (
+                          <span className="px-3 py-1.5 rounded-xl bg-cyan-950/60 text-cyan-300 border border-cyan-500/40 text-[10px] font-bold font-mono">
+                            You
+                          </span>
+                        ) : isAlreadyFriend ? (
                           <span className="px-3 py-1.5 rounded-xl bg-[#0c2438] text-cyan-300 border border-cyan-500/30 text-[10px] font-bold font-mono">
                             Connected
                           </span>
@@ -571,6 +602,9 @@ export default function Friends() {
                   <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
                     {pendingRequests.map((req) => {
                       const isOutgoing = req.requesterId === user?.id;
+                      const targetPeerId = isOutgoing
+                        ? req.addresseeId
+                        : (req.requesterId || req.requester?.id);
                       const peerDisplayName = isOutgoing
                         ? (req.addresseeDisplayName || 'Audiophile')
                         : (req.requesterDisplayName || req.requester?.displayName || 'Audiophile');
@@ -596,7 +630,16 @@ export default function Friends() {
                           key={req.id}
                           className="p-3.5 rounded-2xl bg-[#061421] border border-[#193d5f] flex items-center justify-between gap-3"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div 
+                            onClick={() => {
+                              if (targetPeerId) {
+                                const target = peerUsername || (peerHandle ? peerHandle.replace(/^@/, '') : '') || targetPeerId;
+                                navigate(targetPeerId === user?.id ? '/profile' : `/profile/${encodeURIComponent(target)}`);
+                              }
+                            }}
+                            className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-85 transition-opacity"
+                            title="View Profile"
+                          >
                             {peerAvatar ? (
                               <img
                                 src={peerAvatar}
@@ -610,7 +653,7 @@ export default function Friends() {
                             )}
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
+                                <h5 className="text-xs font-bold text-[#E8EEF0] truncate hover:text-cyan-300 transition-colors">
                                   {peerDisplayName}
                                 </h5>
                                 {isOutgoing && (
@@ -700,7 +743,7 @@ export default function Friends() {
                 ) : (
                   <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
                     {friendsList.map((friend) => {
-                      const friendKey = friend.friendId || friend.friendshipId || friend.id;
+                      const friendKey = friend.friendId || friend.id;
                       const friendHandle = friend.username
                         ? `@${friend.username}`
                         : (friend.handle || 'Listener');
@@ -716,7 +759,14 @@ export default function Friends() {
                           key={friendKey}
                           className="p-3.5 rounded-2xl bg-[#061421] border border-[#153654] flex items-center justify-between gap-3 hover:border-[#1d4870] transition-colors"
                         >
-                          <div className="flex items-center gap-3 min-w-0">
+                          <div 
+                            onClick={() => {
+                              const target = friend.username || (friend.handle ? friend.handle.replace(/^@/, '') : '') || friendKey;
+                              navigate(`/profile/${encodeURIComponent(target)}`);
+                            }}
+                            className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-85 transition-opacity"
+                            title="View Profile"
+                          >
                             {friend.avatarUrl ? (
                               <img
                                 src={friend.avatarUrl}
@@ -729,7 +779,7 @@ export default function Friends() {
                               </div>
                             )}
                             <div className="min-w-0">
-                              <h5 className="text-xs font-bold text-[#E8EEF0] truncate">
+                              <h5 className="text-xs font-bold text-[#E8EEF0] truncate hover:text-cyan-300 transition-colors">
                                 {friend.displayName}
                               </h5>
                               <p className="text-[10px] text-[#91B9C5]/70 font-mono truncate">
@@ -739,10 +789,12 @@ export default function Friends() {
                           </div>
 
                           <div className="flex items-center gap-2 shrink-0">
-                            {/* Chapter 5.4: [VIEW PROFILE] button */}
                             <button
                               type="button"
-                              onClick={() => setViewingProfileFriend(friend)}
+                              onClick={() => {
+                                const target = friend.username || (friend.handle ? friend.handle.replace(/^@/, '') : '') || friendKey;
+                                navigate(`/profile/${encodeURIComponent(target)}`);
+                              }}
                               className="px-3 py-1.5 rounded-xl bg-[#0e273d] hover:bg-[#143552] text-[#91B9C5] hover:text-white border border-[#1b4366] text-xs font-medium transition-colors cursor-pointer"
                             >
                               View Profile
@@ -777,62 +829,6 @@ export default function Friends() {
         note={replyModalNote}
         onSuccess={handleReplySuccess}
       />
-
-      {/* 4. VIEW FRIEND PROFILE MODAL */}
-      {viewingProfileFriend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="relative w-full max-w-sm rounded-3xl bg-[#091e30] border border-[#1b4366] p-6 shadow-2xl space-y-4 text-center">
-            <button
-              type="button"
-              onClick={() => setViewingProfileFriend(null)}
-              className="absolute top-4 right-4 p-1 rounded-full text-[#91B9C5] hover:text-white hover:bg-[#122e47]"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {viewingProfileFriend.avatarUrl ? (
-              <img
-                src={viewingProfileFriend.avatarUrl}
-                alt={viewingProfileFriend.displayName}
-                className="w-20 h-20 rounded-3xl object-cover border-2 border-[#204d73] mx-auto shadow-lg"
-              />
-            ) : (
-              <div className="w-20 h-20 rounded-3xl bg-[#0d2840] border-2 border-[#204d73] mx-auto shadow-lg flex items-center justify-center text-xl font-bold text-cyan-300">
-                {(viewingProfileFriend.displayName || 'F')
-                  .split(' ')
-                  .map((part) => part[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()}
-              </div>
-            )}
-
-            <div>
-              <h4 className="text-base font-serif font-bold text-[#E8EEF0]">
-                {viewingProfileFriend.displayName}
-              </h4>
-              <p className="text-xs font-mono text-cyan-300">
-                {viewingProfileFriend.username ? `@${viewingProfileFriend.username}` : (viewingProfileFriend.handle || 'Listener')}
-              </p>
-            </div>
-
-            <p className="text-xs text-[#91B9C5]/80 leading-relaxed font-sans">
-              {viewingProfileFriend.bio || 'Connected music listener on SAY.'}
-            </p>
-
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setViewingProfileFriend(null)}
-                className="w-full py-2 rounded-xl bg-[#143552] hover:bg-[#1c476d] text-xs font-bold text-[#E8EEF0] transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }

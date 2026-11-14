@@ -15,9 +15,17 @@ public interface INoteService {
 
     CompletableFuture<List<NoteResponseDto>> getPublicFeed();
 
+    CompletableFuture<List<NoteResponseDto>> getPublicFeed(UUID viewerId);
+
     CompletableFuture<List<NoteResponseDto>> getFriendsFeed(UUID currentUserId);
 
     CompletableFuture<List<NoteResponseDto>> getUserNotes(UUID userId);
+
+    CompletableFuture<List<NoteResponseDto>> getUserNotes(UUID userId, UUID viewerId);
+
+    CompletableFuture<NoteResponseDto> toggleLikeNote(UUID noteId, UUID userId);
+
+    CompletableFuture<NoteResponseDto> toggleSaveNote(UUID noteId, UUID userId);
 
     CompletableFuture<NoteResponseDto> updateNote(UUID noteId, UUID userId, CreateNoteRequest request);
 
