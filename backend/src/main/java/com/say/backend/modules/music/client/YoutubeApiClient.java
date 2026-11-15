@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Component
@@ -27,6 +28,34 @@ public class YoutubeApiClient {
     private final Map<String, List<TrackSearchResponseDto>> searchCache = new ConcurrentHashMap<>();
     private final Map<String, TrackSearchResponseDto> videoDetailCache = new ConcurrentHashMap<>();
 
+    // Real-time YouTube Quota Tracking (10,000 units/day)
+    private final AtomicLong quotaUsedToday = new AtomicLong(0);
+    private final AtomicLong totalSearches = new AtomicLong(0);
+    private final AtomicLong cacheHits = new AtomicLong(0);
+    private final AtomicLong directApiCalls = new AtomicLong(0);
+
+    public Map<String, Object> getQuotaMetrics() {
+        long used = quotaUsedToday.get();
+        long limit = 10000L;
+        long remaining = Math.max(0, limit - used);
+        long remainingSearches = remaining / 100;
+        long saved = cacheHits.get() * 100L;
+        double percentUsed = Math.min(100.0, Math.round(((double) used / limit) * 1000.0) / 10.0);
+
+        return Map.of(
+                "dailyLimit", limit,
+                "usedUnits", used,
+                "remainingUnits", remaining,
+                "percentUsed", percentUsed,
+                "remainingSearches", remainingSearches,
+                "totalSearches", totalSearches.get(),
+                "cacheHits", cacheHits.get(),
+                "directCalls", directApiCalls.get(),
+                "unitsSavedByCache", saved,
+                "hasApiKey", (apiKey != null && !apiKey.isBlank() && !apiKey.contains("YOUR_"))
+        );
+    }
+
     /**
      * Search YouTube videos by keyword (Uses in-memory cache to minimize 100-unit search quota cost)
      */
@@ -36,13 +65,17 @@ public class YoutubeApiClient {
                 return List.of();
             }
 
+            totalSearches.incrementAndGet();
             String cacheKey = query.trim().toLowerCase();
             if (searchCache.containsKey(cacheKey)) {
+                cacheHits.incrementAndGet();
                 log.info("Serving YouTube search from cache for query: '{}' (Saved 100 API units)", query);
                 return searchCache.get(cacheKey);
             }
 
-            log.info("Querying YouTube Data API v3 search for: {}", query);
+            directApiCalls.incrementAndGet();
+            quotaUsedToday.addAndGet(100);
+            log.info("Querying YouTube Data API v3 search for: {} (Consumed 100 units, total today: {})", query, quotaUsedToday.get());
             List<TrackSearchResponseDto> results = new ArrayList<>();
 
             try {
@@ -121,6 +154,7 @@ public class YoutubeApiClient {
             }
 
             try {
+                quotaUsedToday.incrementAndGet();
                 JsonNode response = restClient.get()
                         .uri("https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id={id}&key={key}",
                                 videoId, apiKey)

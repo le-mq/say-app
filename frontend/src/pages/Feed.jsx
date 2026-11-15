@@ -116,6 +116,9 @@ export default function Feed() {
       audioSnippetEnd: end,
       snippetDuration,
       likesCount: n.likesCount ?? n.likes ?? 0,
+      savesCount: n.savesCount ?? n.saves_count ?? 0,
+      isLiked: Boolean(n.isLiked),
+      isSaved: Boolean(n.isSaved),
       dialogues: n.dialogues || [],
     };
   }, [user]);
@@ -124,7 +127,7 @@ export default function Feed() {
   const loadFeed = useCallback(async () => {
     setIsFeedLoading(true);
     try {
-      const res = await noteService.getPublicFeed();
+      const res = await noteService.getPublicFeed(user?.id);
       const backendNotes = Array.isArray(res) ? res : (res?.data || []);
       if (backendNotes && backendNotes.length > 0) {
         const formatted = backendNotes.map(formatNote);
@@ -139,7 +142,7 @@ export default function Feed() {
     } finally {
       setIsFeedLoading(false);
     }
-  }, [formatNote]);
+  }, [formatNote, user?.id]);
 
   useEffect(() => {
     loadFeed();
@@ -159,9 +162,32 @@ export default function Feed() {
       }
     };
 
+    const handleNoteSynced = (e) => {
+      const syncNoteId = String(e?.detail?.noteId || '');
+      if (!syncNoteId) return;
+      setNotes((prevNotes) =>
+        prevNotes.map((item) => {
+          if (String(item.id) === syncNoteId) {
+            return {
+              ...item,
+              likesCount: typeof e.detail.likesCount === 'number' ? e.detail.likesCount : item.likesCount,
+              savesCount: typeof e.detail.savesCount === 'number' ? e.detail.savesCount : item.savesCount,
+            };
+          }
+          return item;
+        })
+      );
+    };
+
     window.addEventListener('say_note_created', handleNoteCreated);
+    window.addEventListener('say_note_synced', handleNoteSynced);
+    window.addEventListener('say_note_liked', handleNoteSynced);
+    window.addEventListener('say_note_saved', handleNoteSynced);
     return () => {
       window.removeEventListener('say_note_created', handleNoteCreated);
+      window.removeEventListener('say_note_synced', handleNoteSynced);
+      window.removeEventListener('say_note_liked', handleNoteSynced);
+      window.removeEventListener('say_note_saved', handleNoteSynced);
     };
   }, [loadFeed, formatNote]);
 
@@ -386,17 +412,34 @@ export default function Feed() {
   }, [activeNoteId, activeNote?.id, isPlaying, loadTrack]);
 
   return (
-    <div className={`relative w-full h-[calc(100dvh-4rem-4.5rem)] sm:h-[calc(100vh-4rem-4.5rem)] flex items-center justify-center overflow-hidden select-text bg-[#061320] ${isStudioOpen ? 'pointer-events-none select-none' : ''}`}>
+    <div className={`relative w-full h-[calc(100dvh-4rem-4.5rem)] sm:h-[calc(100vh-4rem-4.5rem)] flex items-center justify-center overflow-hidden select-text bg-[#071523] text-[#E8EEF0] selection:bg-[#c4b5fd]/40 selection:text-white ${isStudioOpen ? 'pointer-events-none select-none' : ''}`}>
       
-      {/* 1. DYNAMIC AMBIENT AURA (Dark Petrol Canvas with subtle, uniform backlight) */}
+      {/* 1. DYNAMIC AMBIENT AURA - SAY Logo signature brand gradient (Lavender Mist + Champagne Amber + Petrol) */}
+      <div 
+        className="absolute inset-0 pointer-events-none z-0"
+        style={{
+          background: 'radial-gradient(circle at 50% 15%, rgba(196, 181, 253, 0.08) 0%, rgba(251, 191, 36, 0.03) 25%, rgba(145, 185, 197, 0.02) 50%, transparent 80%)'
+        }}
+      />
+      {/* Secondary accent atmospheric dust */}
+      <div 
+        className="absolute top-1/4 -left-20 w-96 h-96 rounded-full filter blur-[140px] opacity-25 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, rgba(251, 191, 36, 0.05) 50%, transparent 80%)'
+        }}
+      />
+      <div 
+        className="absolute bottom-10 -right-20 w-96 h-96 rounded-full filter blur-[140px] opacity-20 pointer-events-none"
+        style={{
+          background: 'radial-gradient(circle, rgba(145, 185, 197, 0.15) 0%, rgba(167, 139, 250, 0.08) 50%, transparent 80%)'
+        }}
+      />
       {activeNote?.songImageUrl && (
         <div className="absolute inset-0 pointer-events-none transition-all duration-1000 ease-out overflow-hidden z-0">
           <div 
-            className="absolute -inset-[30%] bg-cover bg-center filter blur-[120px] opacity-15 scale-125 saturate-120 transition-all duration-1000"
+            className="absolute -inset-[30%] bg-cover bg-center filter blur-[180px] opacity-[0.07] scale-125 transition-all duration-1000"
             style={{ backgroundImage: `url(${activeNote.songImageUrl})` }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#06121d]/95 via-[#081724]/98 to-[#040c14]" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(0,89,76,0.08)_0%,transparent_60%)]" />
         </div>
       )}
 
@@ -414,26 +457,28 @@ export default function Feed() {
           <div className="w-full h-8 px-2 py-1.5 shrink-0 invisible pointer-events-none" aria-hidden="true" />
 
           {/* Unified 500px card container matching Center and Right cards */}
-          <div className="relative w-full h-[500px] rounded-3xl p-5 backdrop-blur-2xl bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col justify-between items-center overflow-hidden group">
+          <div className="relative w-full h-[500px] rounded-3xl p-5 bg-[#0d2035]/75 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col justify-between items-center overflow-hidden group backdrop-blur-2xl">
+            {/* Top glass gradient edge highlight */}
+            <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-violet-300/30 to-transparent pointer-events-none" />
             
-            {/* Ambient backlight reflection */}
+            {/* Ambient backlight reflection — subtle powdery lavender mist & champagne gold */}
             <div 
-              className="absolute -top-12 -left-12 w-48 h-48 rounded-full filter blur-3xl opacity-20 pointer-events-none transition-all duration-1000 group-hover:opacity-30"
+              className="absolute -top-12 -left-12 w-48 h-48 rounded-full filter blur-3xl opacity-25 pointer-events-none transition-all duration-1000 group-hover:opacity-35"
               style={{
-                background: 'radial-gradient(circle, rgba(56,189,248,0.18) 0%, rgba(0,89,76,0.12) 50%, transparent 100%)'
+                background: 'radial-gradient(circle, rgba(196,181,253,0.18) 0%, rgba(251,191,36,0.06) 40%, rgba(145,185,197,0.06) 70%, transparent 100%)'
               }}
             />
 
             {/* Status Header */}
-            <div className="relative z-10 w-full flex items-center justify-between pb-3 border-b border-sky-500/20 shrink-0">
+            <div className="relative z-10 w-full flex items-center justify-between pb-3 border-b border-violet-300/15 shrink-0">
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${isTurntablePlaying ? 'bg-sky-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className={`w-2 h-2 rounded-full ${isTurntablePlaying ? 'bg-violet-300 animate-pulse' : 'bg-slate-500'}`} />
                 <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#E8EEF0]/90">
                   VINYL TURNTABLE
                 </span>
               </div>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono ${
-                isTurntablePlaying ? 'bg-sky-950/80 text-sky-200 border border-sky-400/50 shadow-[0_0_8px_rgba(56,189,248,0.3)]' : 'bg-white/[0.05] text-slate-400 border border-white/10'
+                isTurntablePlaying ? 'bg-violet-950/60 text-violet-200 border border-violet-300/35 shadow-[0_0_8px_rgba(196,181,253,0.2)]' : 'bg-white/[0.05] text-slate-400 border border-white/10'
               }`}>
                 {isTurntablePlaying ? '● PLAYING' : 'READY'}
               </span>
@@ -446,25 +491,25 @@ export default function Feed() {
               title={isTurntablePlaying ? "Pause Vinyl Record" : "Play Vinyl Record"}
             >
               <div 
-                className={`w-44 h-44 rounded-full bg-[#071523] border-4 border-[#122e44] shadow-[0_15px_40px_rgba(0,0,0,0.85)] flex items-center justify-center relative overflow-hidden transition-all duration-700 group-hover:border-cyan-400/50 ${
-                  isTurntablePlaying ? 'animate-spin-slow ring-2 ring-cyan-400/40' : ''
+                className={`w-44 h-44 rounded-full bg-[#071523] border-4 border-[#142f47] shadow-[0_15px_40px_rgba(0,0,0,0.85)] flex items-center justify-center relative overflow-hidden transition-all duration-700 group-hover:border-violet-300/40 ${
+                  isTurntablePlaying ? 'animate-spin-slow ring-2 ring-violet-300/30' : ''
                 }`}
               >
                 {/* Vinyl sound groove micro-rings */}
-                <div className="absolute inset-2.5 rounded-full border border-sky-400/15" />
-                <div className="absolute inset-6 rounded-full border border-sky-400/10" />
-                <div className="absolute inset-10 rounded-full border border-sky-400/15" />
-                <div className="absolute inset-14 rounded-full border border-sky-400/10" />
+                <div className="absolute inset-2.5 rounded-full border border-violet-300/10" />
+                <div className="absolute inset-6 rounded-full border border-violet-300/10" />
+                <div className="absolute inset-10 rounded-full border border-violet-300/10" />
+                <div className="absolute inset-14 rounded-full border border-violet-300/10" />
                 
                 {/* Center Vinyl Artwork Label */}
-                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-sky-400/40 shadow-inner relative">
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-violet-300/30 shadow-inner relative">
                   <img 
                     src={activeNote?.songImageUrl} 
                     alt={activeNote?.songTitle} 
                     className="w-full h-full object-cover select-none pointer-events-none" 
                   />
                 </div>
-                <div className="absolute w-3 h-3 rounded-full bg-[#081724] border border-sky-300/40 pointer-events-none" />
+                <div className="absolute w-3 h-3 rounded-full bg-[#071523] border border-violet-300/30 pointer-events-none" />
               </div>
 
               {/* Stylus needle arm */}
@@ -474,12 +519,12 @@ export default function Feed() {
                 }`}
               >
                 <div className="w-1.5 h-14 bg-gradient-to-b from-neutral-200 via-neutral-300 to-neutral-500 rounded-full shadow-md" />
-                <div className="w-2.5 h-3 bg-cyan-400/90 rounded -ml-0.5 shadow-sm" />
+                <div className="w-2.5 h-3 bg-violet-300/90 rounded -ml-0.5 shadow-sm" />
               </div>
             </div>
 
             {/* Turntable Info Box */}
-            <div className="relative z-10 w-full text-left pt-3 border-t border-sky-500/20 shrink-0">
+            <div className="relative z-10 w-full text-left pt-3 border-t border-violet-300/15 shrink-0">
               <p className="text-xs font-bold text-[#E8EEF0] truncate">
                 {activeNote?.songTitle}
               </p>
@@ -487,7 +532,7 @@ export default function Feed() {
                 {activeNote?.artistName}
               </p>
 
-              <div className="mt-2.5 pt-2 border-t border-sky-500/15 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]/80">
+              <div className="mt-2.5 pt-2 border-t border-violet-300/10 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]/80">
                 <span>PREVIEW: {activeNote?.snippetDuration || 30}s</span>
                 <span>TEMPLATE: {activeNote?.templateType || 'RECEIPTIFY'}</span>
               </div>
@@ -504,7 +549,7 @@ export default function Feed() {
           {/* Top Control Bar: Auto-Play toggle with SAY Brand Cyan / Petrol Palette */}
           <div className="w-full flex items-center justify-between px-2 py-1.5 text-xs font-mono shrink-0">
             <span className="text-[11px] font-bold text-[#E8EEF0] flex items-center gap-1.5">
-              <Disc className="w-3.5 h-3.5 text-sky-300 animate-spin-slow" />
+              <Disc className="w-3.5 h-3.5 text-violet-300 animate-spin-slow" />
               <span>Feed Stream</span>
             </span>
 
@@ -515,19 +560,19 @@ export default function Feed() {
                 onClick={handleToggleAutoPlay}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-mono font-bold border transition-all cursor-pointer ${
                   isAutoPlay
-                    ? 'bg-gradient-to-r from-[#00594c]/90 via-[#07243a] to-sky-950/90 text-sky-200 border-sky-400/50 shadow-sm shadow-sky-950/50'
+                    ? 'bg-gradient-to-r from-[#0e2a44] via-[#152a46] to-[#1e2a4a] text-violet-200 border-violet-300/40 shadow-sm'
                     : 'bg-[#091f33] text-slate-400 hover:text-white border-sky-500/20'
                 }`}
                 title={isAutoPlay ? 'Auto-play & auto-scroll is ENABLED' : 'Enable auto-play & auto-scroll'}
               >
                 {isAutoPlay ? (
                   <>
-                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-ping" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-ping" />
                     <span>Auto-Play ON</span>
                   </>
                 ) : (
                   <>
-                    <Play className="w-2.5 h-2.5 fill-current text-[#91B9C5]" />
+                    <Play className="w-2.5 h-2.5 fill-current text-violet-300/80" />
                     <span>Auto-Play OFF</span>
                   </>
                 )}
@@ -539,8 +584,8 @@ export default function Feed() {
                 onClick={toggleAmbientPanel}
                 className={`hidden xl:flex items-center gap-1 p-1.5 rounded-lg border transition-colors cursor-pointer ${
                   isAmbientPanelOpen 
-                    ? 'bg-[#0b243a] border-sky-400/50 text-sky-200 shadow-sm'
-                    : 'bg-[#091f33] border-sky-500/20 text-[#91B9C5] hover:text-white hover:border-sky-400/40'
+                    ? 'bg-[#0f2842] border-violet-300/40 text-violet-200 shadow-sm'
+                    : 'bg-[#091f33] border-sky-500/20 text-[#91B9C5] hover:text-white hover:border-violet-300/40'
                 }`}
                 title={isAmbientPanelOpen ? "Hide detail lyric card" : "Show detail lyric card"}
               >
@@ -616,25 +661,27 @@ export default function Feed() {
             {/* Top spacer matching main's control bar so Card 3 top edge matches Card 2 */}
             <div className="w-full h-8 px-2 py-1.5 shrink-0 invisible pointer-events-none" aria-hidden="true" />
 
-            <div className="relative w-full h-[500px] rounded-3xl p-5 backdrop-blur-2xl bg-gradient-to-b from-[#0e253b]/95 via-[#091c2e]/96 to-[#061422]/98 border border-sky-400/25 shadow-[0_20px_50px_rgba(0,0,0,0.85)] flex flex-col justify-between overflow-hidden group">
+            <div className="relative w-full h-[500px] rounded-3xl p-5 bg-[#0d2035]/75 border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.5)] flex flex-col justify-between overflow-hidden group backdrop-blur-2xl">
+              {/* Top glass gradient edge highlight */}
+              <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-violet-300/30 to-transparent pointer-events-none" />
               
-              {/* Backlight reflection from cover art with SAY cyan / aston martin palette */}
+              {/* Backlight reflection from cover art with subtle powdery lavender mist & champagne gold */}
               <div 
-                className="absolute -top-12 -right-12 w-48 h-48 rounded-full filter blur-3xl opacity-20 pointer-events-none transition-all duration-1000 group-hover:opacity-30"
+                className="absolute -top-12 -right-12 w-48 h-48 rounded-full filter blur-3xl opacity-25 pointer-events-none transition-all duration-1000 group-hover:opacity-35"
                 style={{
-                  background: 'radial-gradient(circle, rgba(56,189,248,0.18) 0%, rgba(0,89,76,0.12) 50%, transparent 100%)'
+                  background: 'radial-gradient(circle, rgba(196,181,253,0.18) 0%, rgba(251,191,36,0.06) 40%, rgba(145,185,197,0.06) 70%, transparent 100%)'
                 }}
               />
 
               {/* Status Header */}
-              <div className="relative z-10 flex items-center justify-between pb-3 border-b border-sky-500/20">
+              <div className="relative z-10 flex items-center justify-between pb-3 border-b border-violet-300/15">
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${isTurntablePlaying ? 'bg-sky-400 animate-pulse' : 'bg-slate-500'}`} />
+                  <span className={`w-2 h-2 rounded-full ${isTurntablePlaying ? 'bg-violet-300 animate-pulse' : 'bg-slate-500'}`} />
                   <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#E8EEF0]/90">
                     AMBIENT MEMORY
                   </span>
                 </div>
-                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-sky-950/80 text-sky-200 border border-sky-400/40">
+                <span className="text-[9px] font-mono px-2 py-0.5 rounded-full bg-violet-950/60 text-violet-200 border border-violet-300/35">
                   {isTurntablePlaying ? 'PLAYING' : 'FOCUSED'}
                 </span>
               </div>
@@ -642,8 +689,8 @@ export default function Feed() {
               {/* Center: Poetic Memory Lyric Quote */}
               <div className="relative z-10 my-auto py-4 flex flex-col items-center">
                 {activeNote?.lyricSnippet ? (
-                  <div className="w-full p-4 rounded-2xl bg-[#06121e]/85 border border-sky-400/25 backdrop-blur-md text-center shadow-inner">
-                    <span className="text-[9px] font-mono text-sky-300 uppercase tracking-widest block mb-2 font-bold">
+                  <div className="w-full p-4 rounded-2xl bg-[#071624]/85 border border-violet-300/20 backdrop-blur-md text-center shadow-inner">
+                    <span className="text-[9px] font-mono text-violet-300 uppercase tracking-widest block mb-2 font-bold">
                       POETIC MEMORY
                     </span>
                     <p className="text-xs text-[#E8EEF0] italic font-serif leading-relaxed line-clamp-3">
@@ -658,16 +705,16 @@ export default function Feed() {
 
                 {/* Mood Tag Badge */}
                 {activeNote?.emotionTag && (
-                  <div className="mt-4 px-3 py-1 rounded-full bg-[#0a2338] border border-sky-400/30 text-xs font-mono text-sky-200">
+                  <div className="mt-4 px-3.5 py-1 rounded-full bg-gradient-to-r from-violet-500/15 via-[#0d2235] to-amber-500/10 border border-violet-300/30 text-xs font-mono text-violet-200 shadow-sm backdrop-blur-md">
                     {activeNote.emotionTag}
                   </div>
                 )}
               </div>
 
               {/* Bottom: SAY Tactile Branding */}
-              <div className="relative z-10 pt-3 border-t border-sky-500/20 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]">
+              <div className="relative z-10 pt-3 border-t border-violet-300/15 flex items-center justify-between text-[10px] font-mono text-[#91B9C5]">
                 <span className="flex items-center gap-1.5 text-white/90">
-                  <Disc className="w-3.5 h-3.5 text-sky-400" />
+                  <Disc className="w-3.5 h-3.5 text-violet-300" />
                   <span className="font-bold text-[10.5px]">SAY TACTILE</span>
                 </span>
                 <span className="text-[9px] text-[#91B9C5]/60">HI-RES AUDIO</span>

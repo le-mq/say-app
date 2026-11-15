@@ -21,17 +21,15 @@ public interface INoteRepository extends JpaRepository<Note, UUID> {
 
     @Query("""
         SELECT n FROM Note n
-        WHERE n.visibility = 'PUBLIC'
-           OR (n.visibility = 'FRIENDS_ONLY' AND n.user.id IN :friendUserIds)
-           OR (n.user.id = :currentUserId)
+        WHERE n.user.id IN :friendUserIds
+           OR (n.user.id = :currentUserId AND n.visibility = 'FRIENDS_ONLY')
         ORDER BY n.createdAt DESC
     """)
     List<Note> findFeedNotes(@Param("currentUserId") UUID currentUserId, @Param("friendUserIds") List<UUID> friendUserIds);
 
     @Query("""
         SELECT n FROM Note n
-        WHERE n.visibility = 'PUBLIC'
-           OR (n.user.id = :currentUserId)
+        WHERE n.user.id = :currentUserId AND n.visibility = 'FRIENDS_ONLY'
         ORDER BY n.createdAt DESC
     """)
     List<Note> findFeedNotesWithoutFriends(@Param("currentUserId") UUID currentUserId);

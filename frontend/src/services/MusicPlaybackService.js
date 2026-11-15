@@ -484,18 +484,21 @@ export class YouTubeAdapter {
 
       const current = this.player.getCurrentTime();
 
-      // Capture exact video duration from YouTube Player (even if > 1 hour)
+      // Throttle getDuration & CustomEvent dispatch to avoid excessive re-renders
       try {
-        const fullDur = Math.round(this.player.getDuration() || 0);
-        if (fullDur > 0 && (!this.service.currentTrack?.duration || this.service.currentTrack.duration !== fullDur)) {
-          if (this.service.currentTrack) {
-            this.service.currentTrack.duration = fullDur;
-            this.service.currentTrack.fullDuration = fullDur;
-          }
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('say_track_duration_detected', {
-              detail: { trackId: this.service.currentTrack?.id, duration: fullDur }
-            }));
+        if (!this._lastDurCheck || Date.now() - this._lastDurCheck > 2000) {
+          this._lastDurCheck = Date.now();
+          const fullDur = Math.round(this.player.getDuration() || 0);
+          if (fullDur > 0 && (!this.service.currentTrack?.duration || this.service.currentTrack.duration !== fullDur)) {
+            if (this.service.currentTrack) {
+              this.service.currentTrack.duration = fullDur;
+              this.service.currentTrack.fullDuration = fullDur;
+            }
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('say_track_duration_detected', {
+                detail: { trackId: this.service.currentTrack?.id, duration: fullDur }
+              }));
+            }
           }
         }
       } catch (_) {}
@@ -543,7 +546,7 @@ export class YouTubeAdapter {
           this.service.notifySnippetEnded(this.service.currentTrack);
         }
       }
-    }, 200);
+    }, 400); // Relaxed from 200ms to 400ms: cuts CPU timer interrupts by 50% without affecting UI fluidity
   }
 
   stopTicker() {

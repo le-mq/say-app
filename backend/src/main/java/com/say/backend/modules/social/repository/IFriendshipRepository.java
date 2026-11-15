@@ -26,6 +26,14 @@ public interface IFriendshipRepository extends JpaRepository<Friendship, UUID> {
 
     @Query("""
         SELECT f FROM Friendship f
+        WHERE (f.addressee.id = :userId OR f.requester.id = :userId)
+          AND f.status = 'PENDING'
+        ORDER BY f.createdAt DESC
+    """)
+    List<Friendship> findAllPendingRequestsForUser(@Param("userId") UUID userId);
+
+    @Query("""
+        SELECT f FROM Friendship f
         WHERE (f.requester.id = :userId OR f.addressee.id = :userId)
           AND f.status = 'ACCEPTED'
     """)

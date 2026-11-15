@@ -5,6 +5,7 @@ import com.say.backend.common.exception.BadRequestException;
 import com.say.backend.common.exception.ResourceNotFoundException;
 import com.say.backend.modules.auth.entity.User;
 import com.say.backend.modules.auth.repository.IUserRepository;
+import com.say.backend.modules.notification.service.INotificationService;
 import com.say.backend.modules.social.dto.FriendProfileDto;
 import com.say.backend.modules.social.dto.FriendResponse;
 import com.say.backend.modules.social.entity.Friendship;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -27,6 +29,7 @@ public class FriendshipService implements IFriendshipService {
 
     private final IFriendshipRepository friendshipRepository;
     private final IUserRepository userRepository;
+    private final INotificationService notificationService;
 
     @Override
     @Async("taskExecutor")
@@ -44,6 +47,7 @@ public class FriendshipService implements IFriendshipService {
                     .orElseThrow(() -> new ResourceNotFoundException("Addressee not found with id: " + addresseeId));
 
             Optional<Friendship> existing = friendshipRepository.findFriendshipBetween(requesterId, addresseeId);
+            Friendship saved;
             if (existing.isPresent()) {
                 Friendship f = existing.get();
                 if ("ACCEPTED".equals(f.getStatus())) {
@@ -55,17 +59,29 @@ public class FriendshipService implements IFriendshipService {
                 f.setRequester(requester);
                 f.setAddressee(addressee);
                 f.setStatus("PENDING");
-                Friendship updated = friendshipRepository.save(f);
-                return CompletableFuture.completedFuture(mapToResponseDto(updated));
+                saved = friendshipRepository.save(f);
+            } else {
+                Friendship friendship = Friendship.builder()
+                        .requester(requester)
+                        .addressee(addressee)
+                        .status("PENDING")
+                        .build();
+                saved = friendshipRepository.save(friendship);
+            }
+            
+            // Notify addressee that someone sent a friendship invitation
+            try {
+                notificationService.sendNotification(
+                        addresseeId,
+                        requesterId,
+                        "FRIEND_REQUEST",
+                        requester.getDisplayName() + " sent you a friendship invitation.",
+                        saved.getId()
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend request notification: {}", ex.getMessage());
             }
 
-            Friendship friendship = Friendship.builder()
-                    .requester(requester)
-                    .addressee(addressee)
-                    .status("PENDING")
-                    .build();
-
-            Friendship saved = friendshipRepository.save(friendship);
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
@@ -89,6 +105,20 @@ public class FriendshipService implements IFriendshipService {
 
             friendship.setStatus("ACCEPTED");
             Friendship saved = friendshipRepository.save(friendship);
+            
+            // Notify requester that invitation was accepted
+            try {
+                notificationService.sendNotification(
+                        friendship.getRequester().getId(),
+                        currentUserId,
+                        "FRIEND_ACCEPTED",
+                        friendship.getAddressee().getDisplayName() + " accepted your friendship invitation.",
+                        saved.getId()
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend accepted notification: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
@@ -112,6 +142,18 @@ public class FriendshipService implements IFriendshipService {
 
             friendship.setStatus("REJECTED");
             Friendship saved = friendshipRepository.save(friendship);
+
+            // Silently dispatch real-time UI update event without sending an impolite toast/notification to requester
+            try {
+                notificationService.dispatchSilentEvent(
+                        friendship.getRequester().getId(),
+                        "FRIEND_SYNC",
+                        Map.of("type", "FRIEND_REJECTED", "friendshipId", saved.getId().toString())
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch silent friend rejected event: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(mapToResponseDto(saved));
         } catch (AppException e) {
             throw e;
@@ -137,6 +179,7 @@ public class FriendshipService implements IFriendshipService {
                         return FriendProfileDto.builder()
                                 .friendshipId(f.getId())
                                 .friendId(friend.getId())
+                                .username(friend.getUsername())
                                 .displayName(friend.getDisplayName())
                                 .avatarUrl(friend.getAvatarUrl())
                                 .audiophileRank(friend.getAudiophileRank())
@@ -163,7 +206,7 @@ public class FriendshipService implements IFriendshipService {
                 throw new ResourceNotFoundException("User not found with id: " + userId);
             }
 
-            List<Friendship> requests = friendshipRepository.findByAddresseeIdAndStatus(userId, "PENDING");
+            List<Friendship> requests = friendshipRepository.findAllPendingRequestsForUser(userId);
             List<FriendResponse> dtos = requests.stream().map(this::mapToResponseDto).toList();
             return CompletableFuture.completedFuture(dtos);
         } catch (AppException e) {
@@ -189,8 +232,26 @@ public class FriendshipService implements IFriendshipService {
                 throw new BadRequestException("Unauthorized to remove this friendship");
             }
 
+            UUID otherUserId = friendship.getRequester().getId().equals(currentUserId)
+                    ? friendship.getAddressee().getId()
+                    : friendship.getRequester().getId();
+
             friendshipRepository.delete(friendship);
             log.info("Friendship {} successfully removed by user {}", friendshipId, currentUserId);
+
+            // Notify the other user of connection update
+            try {
+                notificationService.sendNotification(
+                        otherUserId,
+                        currentUserId,
+                        "FRIEND_REMOVED",
+                        "Friendship connection was updated.",
+                        friendshipId
+                );
+            } catch (Exception ex) {
+                log.warn("Could not dispatch friend removed notification: {}", ex.getMessage());
+            }
+
             return CompletableFuture.completedFuture(null);
         } catch (AppException e) {
             throw e;
@@ -204,11 +265,15 @@ public class FriendshipService implements IFriendshipService {
         return FriendResponse.builder()
                 .id(friendship.getId())
                 .requesterId(friendship.getRequester().getId())
+                .requesterUsername(friendship.getRequester().getUsername())
                 .requesterDisplayName(friendship.getRequester().getDisplayName())
                 .requesterAvatarUrl(friendship.getRequester().getAvatarUrl())
+                .requesterAudiophileRank(friendship.getRequester().getAudiophileRank())
                 .addresseeId(friendship.getAddressee().getId())
+                .addresseeUsername(friendship.getAddressee().getUsername())
                 .addresseeDisplayName(friendship.getAddressee().getDisplayName())
                 .addresseeAvatarUrl(friendship.getAddressee().getAvatarUrl())
+                .addresseeAudiophileRank(friendship.getAddressee().getAudiophileRank())
                 .status(friendship.getStatus())
                 .createdAt(friendship.getCreatedAt())
                 .updatedAt(friendship.getUpdatedAt())

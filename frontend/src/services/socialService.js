@@ -1,6 +1,11 @@
 import { api } from './api';
 
 export const socialService = {
+  searchUsers: async (query, excludeUserId) => {
+    const params = new URLSearchParams({ query });
+    if (excludeUserId) params.set('excludeUserId', excludeUserId);
+    return api.get(`/users/search?${params.toString()}`);
+  },
   getFriendsList: async (userId) => {
     return api.get(`/social/friends/${userId}`);
   },

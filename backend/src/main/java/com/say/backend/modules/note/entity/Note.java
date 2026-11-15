@@ -64,6 +64,22 @@ public class Note {
     @Column(name = "visibility", nullable = false, length = 20)
     private String visibility = "PUBLIC";
 
+    @Builder.Default
+    @Column(name = "likes_count")
+    private Integer likesCount = 0;
+
+    @Builder.Default
+    @Column(name = "saves_count")
+    private Integer savesCount = 0;
+
+    @Builder.Default
+    @Column(name = "liked_user_ids", columnDefinition = "TEXT")
+    private String likedUserIds = "";
+
+    @Builder.Default
+    @Column(name = "saved_user_ids", columnDefinition = "TEXT")
+    private String savedUserIds = "";
+
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 

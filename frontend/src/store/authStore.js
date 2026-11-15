@@ -127,3 +127,7 @@ export function useAuthStore() {
     deleteAccount: authStore.deleteAccount,
   };
 }
+
+useAuthStore.getState = authStore.getState;
+useAuthStore.subscribe = authStore.subscribe;
+

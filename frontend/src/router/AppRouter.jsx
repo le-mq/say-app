@@ -7,6 +7,7 @@ import Feed from '../pages/Feed';
 import Profile from '../pages/Profile';
 import Friends from '../pages/Friends';
 import MyUniverse from '../pages/MyUniverse';
+import AdminDashboard from '../pages/AdminDashboard';
 import NotFound from '../pages/NotFound';
 
 const router = createBrowserRouter([
@@ -20,7 +21,9 @@ const router = createBrowserRouter([
       { path: 'universe', element: <PrivateRoute Component={MyUniverse} /> },
       { path: 'my-universe', element: <Navigate to="/universe" replace /> },
       { path: 'profile', element: <PrivateRoute Component={Profile} /> },
+      { path: 'profile/:username', element: <PrivateRoute Component={Profile} /> },
       { path: 'friends', element: <PrivateRoute Component={Friends} /> },
+      { path: 'admin', element: <PrivateRoute Component={AdminDashboard} /> },
 
       // Legacy Landing Route (Redirected to Feed)
       { path: 'landing', element: <Navigate to="/feed" replace /> },
